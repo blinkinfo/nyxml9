@@ -35,7 +35,7 @@ LGBM_PARAMS = {
     "reg_alpha": 0.1,
     "reg_lambda": 0.1,
     "verbose": -1,
-    "n_jobs": 2,
+    "n_jobs": -1,
 }
 
 NUM_BOOST_ROUND = 1000
@@ -260,4 +260,5 @@ def train(df_features: pd.DataFrame, slot: str = "current") -> dict:
         "test_metrics": test_metrics,
         "val_wr": best_wr,
         "val_trades": best_trades_per_day,
+        "best_iteration": model.best_iteration,
     }

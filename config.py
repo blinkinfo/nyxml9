@@ -60,7 +60,7 @@ COINBASE_CANDLE_URL: str = "https://api.exchange.coinbase.com/products/BTC-USD/c
 # ML Strategy
 # ---------------------------------------------------------------------------
 ML_MODEL_DIR: str = os.path.join(os.path.dirname(__file__), "models")
-ML_DEFAULT_THRESHOLD: float = 0.535
+ML_DEFAULT_THRESHOLD: float = 0.56
 MEXC_CVD_URL: str = "https://contract.mexc.com/api/v1/contract/kline/BTC_USDT"
 
 # ---------------------------------------------------------------------------

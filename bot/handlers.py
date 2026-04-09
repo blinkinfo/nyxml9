@@ -1013,7 +1013,7 @@ async def _retrain_background(application, chat_id) -> None:
         log.info("Retrain: fetching 5 months of MEXC data...")
         data = await _asyncio.wait_for(
             loop.run_in_executor(None, lambda: data_fetcher.fetch_all(months=5)),
-            timeout=600,
+            timeout=1500,
         )
         log.info("Retrain: building features...")
         df_feat = await _asyncio.wait_for(
@@ -1022,12 +1022,12 @@ async def _retrain_background(application, chat_id) -> None:
                     data["df5"], data["df15"], data["df1h"], data["funding"], data["cvd"]
                 )
             ),
-            timeout=600,
+            timeout=1500,
         )
         log.info("Retrain: training LightGBM (candidate slot)...")
         result = await _asyncio.wait_for(
             loop.run_in_executor(None, lambda: trainer.train(df_feat, slot="candidate")),
-            timeout=600,
+            timeout=1500,
         )
         meta = model_store.load_metadata("candidate") or {}
         threshold = result.get("threshold", 0.535)
@@ -1047,8 +1047,8 @@ async def _retrain_background(application, chat_id) -> None:
         log.info("Retrain complete. val_wr=%.4f", result.get("val_wr", 0))
 
     except _asyncio.TimeoutError:
-        log.error("Retrain background task timed out after 10 min")
-        await notify("Retrain timed out after 10 min. Try again or check Railway logs.")
+        log.error("Retrain background task timed out after 25 min")
+        await notify("Retrain timed out after 25 min. Try again or check Railway logs.")
     except Exception as exc:
         log.exception("Retrain background task failed: %s", exc)
         await notify(f"Retrain failed: {exc}. Check Railway logs.")

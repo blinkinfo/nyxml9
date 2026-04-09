@@ -143,82 +143,113 @@ async def cleanup_bad_redemptions(db_path: str | None = None) -> int:
 
 
 async def migrate_db(db_path: str | None = None) -> None:
-    """Add new columns to existing tables if they don't exist (safe to run repeatedly)."""
+    """Add new columns/tables if they don't exist (safe to run repeatedly).
+
+    Every DDL step is wrapped in its own try/except so a single failure
+    never aborts the rest of the migration.
+    """
+    import logging
+    log = logging.getLogger(__name__)
     path = db_path or cfg.DB_PATH
+
     async with aiosqlite.connect(path) as db:
-        # Check existing columns in trades table
-        cursor = await db.execute("PRAGMA table_info(trades)")
-        columns = {row[1] for row in await cursor.fetchall()}
 
-        if "retry_count" not in columns:
-            await db.execute("ALTER TABLE trades ADD COLUMN retry_count INTEGER DEFAULT 0")
-        if "last_retry_at" not in columns:
-            await db.execute("ALTER TABLE trades ADD COLUMN last_retry_at TIMESTAMP")
-        if "is_demo" not in columns:
-            await db.execute("ALTER TABLE trades ADD COLUMN is_demo INTEGER DEFAULT 0")
+        # --- trades columns ---
+        try:
+            cursor = await db.execute("PRAGMA table_info(trades)")
+            columns = {row[1] for row in await cursor.fetchall()}
+            if "retry_count" not in columns:
+                await db.execute("ALTER TABLE trades ADD COLUMN retry_count INTEGER DEFAULT 0")
+            if "last_retry_at" not in columns:
+                await db.execute("ALTER TABLE trades ADD COLUMN last_retry_at TIMESTAMP")
+            if "is_demo" not in columns:
+                await db.execute("ALTER TABLE trades ADD COLUMN is_demo INTEGER DEFAULT 0")
+        except Exception as e:
+            log.warning("migrate_db: trades column migration failed: %s", e)
 
-        # Check existing columns in signals table
-        cursor2 = await db.execute("PRAGMA table_info(signals)")
-        sig_columns = {row[1] for row in await cursor2.fetchall()}
-        if "filter_blocked" not in sig_columns:
-            await db.execute("ALTER TABLE signals ADD COLUMN filter_blocked INTEGER DEFAULT 0")
-        if "pattern" not in sig_columns:
-            await db.execute("ALTER TABLE signals ADD COLUMN pattern TEXT")
+        # --- signals columns ---
+        try:
+            cursor2 = await db.execute("PRAGMA table_info(signals)")
+            sig_columns = {row[1] for row in await cursor2.fetchall()}
+            if "filter_blocked" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN filter_blocked INTEGER DEFAULT 0")
+            if "pattern" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN pattern TEXT")
+        except Exception as e:
+            log.warning("migrate_db: signals column migration failed: %s", e)
 
-        # Check existing columns in redemptions table
-        cursor3 = await db.execute("PRAGMA table_info(redemptions)")
-        red_columns = {row[1] for row in await cursor3.fetchall()}
-        if "verified" not in red_columns:
+        # --- redemptions columns ---
+        try:
+            cursor3 = await db.execute("PRAGMA table_info(redemptions)")
+            red_columns = {row[1] for row in await cursor3.fetchall()}
+            if "verified" not in red_columns:
+                await db.execute(
+                    "ALTER TABLE redemptions ADD COLUMN verified INTEGER NOT NULL DEFAULT 0"
+                )
+            if "verified_at" not in red_columns:
+                await db.execute(
+                    "ALTER TABLE redemptions ADD COLUMN verified_at TIMESTAMP"
+                )
+        except Exception as e:
+            log.warning("migrate_db: redemptions column migration failed: %s", e)
+
+        # --- ml_config table ---
+        try:
             await db.execute(
-                "ALTER TABLE redemptions ADD COLUMN verified INTEGER NOT NULL DEFAULT 0"
+                "CREATE TABLE IF NOT EXISTS ml_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
             )
-        if "verified_at" not in red_columns:
+        except Exception as e:
+            log.warning("migrate_db: ml_config table creation failed: %s", e)
+
+        # --- model_registry table ---
+        try:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS model_registry (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    slot TEXT NOT NULL,
+                    train_date TEXT,
+                    wr REAL,
+                    precision_score REAL,
+                    trades_per_day REAL,
+                    threshold REAL,
+                    sample_count INTEGER,
+                    path TEXT,
+                    metadata TEXT
+                )
+            """)
+        except Exception as e:
+            log.warning("migrate_db: model_registry table creation failed: %s", e)
+
+        # --- model_blobs table (DB-persisted model storage) ---
+        try:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS model_blobs (
+                    slot TEXT PRIMARY KEY,
+                    blob BLOB NOT NULL,
+                    metadata TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        except Exception as e:
+            log.warning("migrate_db: model_blobs table creation failed: %s", e)
+
+        # --- seed default ML threshold ---
+        try:
             await db.execute(
-                "ALTER TABLE redemptions ADD COLUMN verified_at TIMESTAMP"
+                "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_threshold', '0.56')"
             )
+        except Exception as e:
+            log.warning("migrate_db: ml_threshold seed failed: %s", e)
 
-        # Check and create ml_config table (ML threshold storage)
-        await db.execute(
-            "CREATE TABLE IF NOT EXISTS ml_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-        )
-
-        # Check and create model_registry table
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS model_registry (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                slot TEXT NOT NULL,
-                train_date TEXT,
-                wr REAL,
-                precision_score REAL,
-                trades_per_day REAL,
-                threshold REAL,
-                sample_count INTEGER,
-                path TEXT,
-                metadata TEXT
-            )
-        """)
-
-        # Check and create model_blobs table (DB-persisted model storage)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS model_blobs (
-                slot TEXT PRIMARY KEY,
-                blob BLOB NOT NULL,
-                metadata TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Seed default ML threshold
-        await db.execute(
-            "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_threshold', '0.535')"
-        )
-
-        # Seed any missing default settings (idempotent)
+        # --- seed default settings ---
         for key, value in DEFAULT_SETTINGS.items():
-            await db.execute(
-                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
-                (key, value),
-            )
+            try:
+                await db.execute(
+                    "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                    (key, value),
+                )
+            except Exception as e:
+                log.warning("migrate_db: settings seed failed for key=%s: %s", key, e)
 
         await db.commit()

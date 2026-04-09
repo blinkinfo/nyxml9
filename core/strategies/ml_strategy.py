@@ -28,6 +28,9 @@ FEATURE_COLS = feat_eng.FEATURE_COLS  # 22 features in exact order
 # Module-level reload flag so cmd_promote_model can signal a reload
 _RELOAD_REQUESTED = False
 
+# Module-level preloaded model — injected at startup via set_model()
+_PRELOADED_MODEL = None
+
 
 def request_model_reload() -> None:
     """Signal that the model should be reloaded on the next check_signal call."""
