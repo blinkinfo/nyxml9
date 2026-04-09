@@ -38,6 +38,9 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("\U0001f9ea Demo", callback_data="cmd_demo"),
         ],
         [
+            InlineKeyboardButton("\U0001f916 ML Model", callback_data="cmd_ml"),
+        ],
+        [
             InlineKeyboardButton("\u2753 Help", callback_data="cmd_help"),
             InlineKeyboardButton("\U0001f3e0 Home", callback_data="cmd_menu"),
         ],
@@ -207,5 +210,27 @@ def pattern_keyboard() -> InlineKeyboardMarkup:
     """Keyboard for the /patterns dashboard."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("\U0001f4ca Excel", callback_data="download_pattern_xlsx")],
+        [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
+    ])
+
+
+# ---------------------------------------------------------------------------
+# ML Model submenu
+# ---------------------------------------------------------------------------
+
+def ml_menu() -> InlineKeyboardMarkup:
+    """Inline keyboard for the ML Model submenu."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("\U0001f4ca Model Status", callback_data="ml_status"),
+            InlineKeyboardButton("\U0001f4cf Compare Models", callback_data="ml_compare"),
+        ],
+        [
+            InlineKeyboardButton("\u2b06\ufe0f Promote Candidate", callback_data="ml_promote"),
+            InlineKeyboardButton("\U0001f504 Retrain", callback_data="ml_retrain"),
+        ],
+        [
+            InlineKeyboardButton("\u2699\ufe0f Set Threshold", callback_data="ml_set_threshold"),
+        ],
         [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
     ])

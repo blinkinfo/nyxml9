@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import logging
@@ -43,6 +44,7 @@ from bot.keyboards import (
     back_to_menu,
     download_keyboard,
     main_menu,
+    ml_menu,
     pattern_filter_row,
     pattern_keyboard,
     redeem_confirm_keyboard,
@@ -564,6 +566,42 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data == "download_pattern_xlsx":
         await cmd_download_pattern_excel(update, context)
 
+    # ML Model submenu
+    elif data == "cmd_ml":
+        await query.answer()
+        await _safe_edit(
+            query,
+            "\U0001f916 <b>ML Model</b>\n\nManage the ML inference model, compare versions, retrain, or adjust the signal threshold.",
+            reply_markup=ml_menu(),
+        )
+
+    elif data == "ml_status":
+        await query.answer()
+        await cmd_model_status(update, context)
+
+    elif data == "ml_compare":
+        await query.answer()
+        await cmd_model_compare(update, context)
+
+    elif data == "ml_promote":
+        await query.answer()
+        await cmd_promote_model(update, context)
+
+    elif data == "ml_retrain":
+        await query.answer()
+        await cmd_retrain(update, context)
+
+    elif data == "ml_set_threshold":
+        await query.answer()
+        threshold = await queries.get_ml_threshold()
+        await _safe_edit(
+            query,
+            f"\u2699\ufe0f <b>Set ML Threshold</b>\n\nCurrent threshold: <b>{threshold:.3f}</b>\n\n"
+            "Type the new threshold value (0.50 – 0.95):\n"
+            "Example: <code>0.56</code>",
+        )
+        context.user_data["awaiting_ml_threshold"] = True
+
     else:
         await query.answer("Unknown action")
 
@@ -701,6 +739,28 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
+    # -- ML threshold input -------------------------------------------------------
+    if context.user_data.get("awaiting_ml_threshold"):
+        context.user_data["awaiting_ml_threshold"] = False
+        raw = update.message.text.strip()
+        try:
+            threshold = float(raw)
+            if not (0.50 <= threshold <= 0.95):
+                raise ValueError("out of range")
+        except ValueError:
+            await update.message.reply_text(
+                "\u274c Invalid value. Enter a number between 0.50 and 0.95 (e.g. <code>0.56</code>).",
+                parse_mode="HTML",
+            )
+            return
+        await queries.set_ml_threshold(threshold)
+        await update.message.reply_text(
+            f"\u2705 ML threshold set to <b>{threshold:.3f}</b>. Active on next signal check.",
+            parse_mode="HTML",
+            reply_markup=ml_menu(),
+        )
+        return
+
     # -- Trade amount input --------------------------------------------------------
     if not context.user_data.get("awaiting_amount"):
         return
@@ -779,7 +839,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("redeem",      cmd_redeem))
     application.add_handler(CommandHandler("redemptions", cmd_redemptions))
     application.add_handler(CommandHandler("demo",        cmd_demo))
-    application.add_handler(CommandHandler("patterns",      cmd_patterns))
+    application.add_handler(CommandHandler("patterns",    cmd_patterns))
     # ML model management commands
     application.add_handler(CommandHandler("set_threshold",  cmd_set_threshold))
     application.add_handler(CommandHandler("model_status",   cmd_model_status))
@@ -788,6 +848,29 @@ def register(application) -> None:
     application.add_handler(CommandHandler("retrain",        cmd_retrain))
     application.add_handler(CallbackQueryHandler(callback_router))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    # Register command list with Telegram (shown in the "/" menu button)
+    async def _set_commands(app):
+        from telegram import BotCommand
+        await app.bot.set_my_commands([
+            BotCommand("start",         "Show main menu"),
+            BotCommand("status",        "Bot & account status"),
+            BotCommand("signals",       "Signal history & stats"),
+            BotCommand("trades",        "Trade history & stats"),
+            BotCommand("patterns",      "Per-pattern performance"),
+            BotCommand("demo",          "Demo trading dashboard"),
+            BotCommand("redeem",        "Redeem settled positions"),
+            BotCommand("redemptions",   "Redemption history"),
+            BotCommand("settings",      "Bot settings"),
+            BotCommand("model_status",  "ML model info & metrics"),
+            BotCommand("model_compare", "Compare current vs candidate model"),
+            BotCommand("promote_model", "Promote candidate to current"),
+            BotCommand("retrain",       "Retrain ML model in background"),
+            BotCommand("set_threshold", "Set ML signal threshold (0.50-0.95)"),
+            BotCommand("help",          "Help & command reference"),
+        ])
+
+    application.post_init = _set_commands
 
     async def _error_handler(update, context):
         import traceback
