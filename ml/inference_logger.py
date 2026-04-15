@@ -213,6 +213,10 @@ def log_inference(
                 f.write(encoded)
             _slug_to_offset[slot_slug] = offset
 
+        # Emit to stdout so the record appears in Railway download logs.
+        # Prefix INFER_LOG: makes it easy to grep/filter from other bot output.
+        print("INFER_LOG:", line, end="", flush=True)
+
         log.debug(
             "inference_logger: wrote record for slot=%s fired=%s side=%s p_up=%s nan=%s",
             slot_slug, fired, side,
@@ -275,6 +279,8 @@ def log_outcome(
                         with open(path, "r+b") as f:
                             f.seek(offset)
                             f.write(new_bytes)
+                        # Emit updated record to stdout for Railway logs
+                        print("INFER_LOG:", new_line, end="", flush=True)
                         log.debug(
                             "inference_logger: outcome patched in-place for slot=%s is_win=%s",
                             slot_slug, is_win,
@@ -300,6 +306,9 @@ def log_outcome(
             _ensure_dir(path)
             with open(path, "ab") as f:
                 f.write(patch_line.encode("utf-8"))
+
+            # Emit patch record to stdout for Railway logs
+            print("INFER_LOG:", patch_line, end="", flush=True)
 
             log.debug(
                 "inference_logger: outcome appended as patch for slot=%s is_win=%s",
