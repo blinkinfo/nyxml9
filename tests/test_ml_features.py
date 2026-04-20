@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
 import sys
-sys.path.insert(0, '/home/nebula/nyxml4')
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from ml.features import compute_atr14, FEATURE_COLS
 import config as cfg
@@ -88,8 +91,6 @@ def test_asof_backward_vectorized_matches_searchsorted():
     """_asof_backward (now pd.merge_asof) must produce identical results to
     the previous searchsorted row-loop implementation for all call sites:
     15m merge, 1h merge, and funding merge."""
-    import sys
-    sys.path.insert(0, '/home/nebula/nyxml4')
     from ml.features import _asof_backward
 
     rng = np.random.default_rng(0)

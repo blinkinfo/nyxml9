@@ -60,6 +60,7 @@ def settings_keyboard(
     trade_mode: str = "fixed",
     trade_pct: float = 5.0,
     invert_trades_on: bool = False,
+    ml_volatility_gate_enabled: bool = True,
 ) -> InlineKeyboardMarkup:
     # Row 1: paired toggles — related switches side-by-side
     at_label = f"\U0001f916 AutoTrade: {'ON' if autotrade_on else 'OFF'}"
@@ -99,6 +100,11 @@ def settings_keyboard(
         [InlineKeyboardButton(
             f"\U0001f504 Invert Trades: {'ON' if invert_trades_on else 'OFF'}",
             callback_data="toggle_invert_trades",
+        )],
+        # ML volatility gate
+        [InlineKeyboardButton(
+            f"\U0001f6e1 ML Volatility Gate: {'ON' if ml_volatility_gate_enabled else 'OFF'}",
+            callback_data="toggle_ml_volatility_gate",
         )],
         # Back
         [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
@@ -270,4 +276,12 @@ def ml_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("\u2699\ufe0f Set DOWN Threshold", callback_data="ml_set_down_threshold"),
         ],
         [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
+    ])
+
+
+def ml_volatility_gate_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Disable Gate", callback_data="confirm_disable_ml_volatility_gate")],
+        [InlineKeyboardButton("Keep Gate Enabled", callback_data="cancel_disable_ml_volatility_gate")],
+        [InlineKeyboardButton("Back to Settings", callback_data="cmd_settings")],
     ])

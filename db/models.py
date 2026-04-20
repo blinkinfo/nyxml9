@@ -101,6 +101,7 @@ DEFAULT_SETTINGS = {
     "demo_trade_enabled": "false",
     "demo_bankroll_usdc": "1000.00",
     "invert_trades_enabled": "false",
+    "ml_volatility_gate_enabled": "true",
 }
 
 

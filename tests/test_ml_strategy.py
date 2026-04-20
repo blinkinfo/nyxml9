@@ -1,5 +1,8 @@
 import sys
-sys.path.insert(0, '/home/nebula/nyxtest4')
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from ml.features import FEATURE_COLS
 

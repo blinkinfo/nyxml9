@@ -61,6 +61,30 @@ async def get_trade_pct() -> float:
         return cfg.TRADE_PCT
 
 
+async def get_ml_volatility_gate_enabled() -> bool:
+    """Return True when the ML volatility regime gate should remain active.
+
+    Missing, invalid, or failed reads default to enabled for safety.
+    """
+    try:
+        val = await get_setting("ml_volatility_gate_enabled")
+    except Exception:
+        return True
+    if val is None:
+        return True
+    normalized = str(val).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+async def set_ml_volatility_gate_enabled(enabled: bool) -> None:
+    """Persist the ML volatility regime gate toggle."""
+    await set_setting("ml_volatility_gate_enabled", "1" if enabled else "0")
+
+
 async def resolve_trade_amount(poly_client=None, is_demo: bool = False) -> tuple[float, str]:
     """Resolve the trade amount based on current trade_mode setting.
 

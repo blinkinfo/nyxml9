@@ -377,62 +377,73 @@ class MLStrategy(BaseStrategy):
             #   - The gate itself is wrapped in try/except so a metadata read error
             #     never crashes inference -- the model fires normally if gate errors.
             # ------------------------------------------------------------------
+            regime_gate_enabled = True
             try:
-                _meta = model_store.load_metadata(self._model_slot)
-                if _meta is not None:
-                    _regime_p5  = _meta.get("regime_vol_p5")
-                    _regime_p95 = _meta.get("regime_vol_p95")
-                    if _regime_p5 is not None and _regime_p95 is not None:
-                        _vol_regime_idx = FEATURE_COLS.index("vol_regime")
-                        _live_regime = float(feature_row[0, _vol_regime_idx])
-                        if not (_regime_p5 <= _live_regime <= _regime_p95):
-                            _regime_skip_reason = (
-                                f"Regime gate: vol_regime={_live_regime:.4f} outside training "
-                                f"distribution [{_regime_p5:.4f}, {_regime_p95:.4f}] -- "
-                                f"signal suppressed (covariate shift guard)"
-                            )
-                            log.warning("MLStrategy: %s", _regime_skip_reason)
-                            inference_logger.log_inference(
-                                slot_slug=slug,
-                                slot_ts=slot_ts,
-                                slot_start_str=slot_start_str,
-                                slot_end_str=slot_end_str,
-                                df5_rows=df5_rows,
-                                df15_rows=df15_rows,
-                                df1h_rows=df1h_rows,
-                                cvd_rows=cvd_rows,
-                                funding_buf_len=funding_buf_len,
-                                candle_n1_ts=candle_n1_ts,
-                                candle_n1_close=candle_n1_close,
-                                candle_n1_vol=candle_n1_vol,
-                                feature_names=FEATURE_COLS,
-                                feature_row=feature_row,
-                                nan_features=[],
-                                p_up=prob,
-                                p_down=prob_down,
-                                up_threshold=up_threshold,
-                                down_threshold=down_threshold,
-                                down_enabled=down_enabled,
-                                fired=False,
-                                side=None,
-                                skip_reason=_regime_skip_reason,
-                            )
-                            return {
-                                **base_fields,
-                                "pattern": f"p={prob:.4f} [regime_gate]",
-                                "reason": _regime_skip_reason,
-                                "ml_p_up":           prob,
-                                "ml_p_down":         prob_down,
-                                "ml_up_threshold":   up_threshold,
-                                "ml_down_threshold": down_threshold,
-                                "ml_down_enabled":   down_enabled,
-                            }
-            except Exception as _rge:
-                # Never let the regime gate itself crash inference.
-                # Log and continue -- the model fires normally if the gate errors.
+                regime_gate_enabled = await queries.get_ml_volatility_gate_enabled()
+            except Exception as _gate_setting_exc:
                 log.warning(
-                    "MLStrategy: regime gate check failed (non-fatal, continuing): %s", _rge
+                    "MLStrategy: volatility gate setting read failed; defaulting enabled: %s",
+                    _gate_setting_exc,
                 )
+                regime_gate_enabled = True
+
+            if regime_gate_enabled:
+                try:
+                    _meta = model_store.load_metadata(self._model_slot)
+                    if _meta is not None:
+                        _regime_p5  = _meta.get("regime_vol_p5")
+                        _regime_p95 = _meta.get("regime_vol_p95")
+                        if _regime_p5 is not None and _regime_p95 is not None:
+                            _vol_regime_idx = FEATURE_COLS.index("vol_regime")
+                            _live_regime = float(feature_row[0, _vol_regime_idx])
+                            if not (_regime_p5 <= _live_regime <= _regime_p95):
+                                _regime_skip_reason = (
+                                    f"Regime gate: vol_regime={_live_regime:.4f} outside training "
+                                    f"distribution [{_regime_p5:.4f}, {_regime_p95:.4f}] -- "
+                                    f"signal suppressed (covariate shift guard)"
+                                )
+                                log.warning("MLStrategy: %s", _regime_skip_reason)
+                                inference_logger.log_inference(
+                                    slot_slug=slug,
+                                    slot_ts=slot_ts,
+                                    slot_start_str=slot_start_str,
+                                    slot_end_str=slot_end_str,
+                                    df5_rows=df5_rows,
+                                    df15_rows=df15_rows,
+                                    df1h_rows=df1h_rows,
+                                    cvd_rows=cvd_rows,
+                                    funding_buf_len=funding_buf_len,
+                                    candle_n1_ts=candle_n1_ts,
+                                    candle_n1_close=candle_n1_close,
+                                    candle_n1_vol=candle_n1_vol,
+                                    feature_names=FEATURE_COLS,
+                                    feature_row=feature_row,
+                                    nan_features=[],
+                                    p_up=prob,
+                                    p_down=prob_down,
+                                    up_threshold=up_threshold,
+                                    down_threshold=down_threshold,
+                                    down_enabled=down_enabled,
+                                    fired=False,
+                                    side=None,
+                                    skip_reason=_regime_skip_reason,
+                                )
+                                return {
+                                    **base_fields,
+                                    "pattern": f"p={prob:.4f} [regime_gate]",
+                                    "reason": _regime_skip_reason,
+                                    "ml_p_up":           prob,
+                                    "ml_p_down":         prob_down,
+                                    "ml_up_threshold":   up_threshold,
+                                    "ml_down_threshold": down_threshold,
+                                    "ml_down_enabled":   down_enabled,
+                                }
+                except Exception as _rge:
+                    # Never let the regime gate itself crash inference.
+                    # Log and continue -- the model fires normally if the gate errors.
+                    log.warning(
+                        "MLStrategy: regime gate check failed (non-fatal, continuing): %s", _rge
+                    )
 
             down_qualifies = down_enabled and (prob_down >= down_threshold)
 

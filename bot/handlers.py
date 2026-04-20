@@ -47,6 +47,7 @@ from bot.keyboards import (
     down_override_keyboard,
     main_menu,
     ml_menu,
+    ml_volatility_gate_confirm_keyboard,
     pattern_keyboard,
     redeem_confirm_keyboard,
     redeem_done_keyboard,
@@ -236,14 +237,16 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     demo_trade = await queries.is_demo_trade_enabled()
     demo_bankroll = await queries.get_demo_bankroll()
     invert_trades = await queries.is_invert_trades_enabled()
+    ml_volatility_gate_enabled = await queries.get_ml_volatility_gate_enabled()
     at_text = "ON" if autotrade else "OFF"
     mode_summary = f"{trade_pct:.1f}%" if trade_mode == "pct" else f"${trade_amount:.2f}"
     dt_text = "ON" if demo_trade else "OFF"
     text = (
         f"\u2699\ufe0f <b>Settings</b>\n"
-        f"AutoTrade: {at_text}  |  Mode: {mode_summary}  |  Demo: {dt_text}"
+        f"AutoTrade: {at_text}  |  Mode: {mode_summary}  |  Demo: {dt_text}\n"
+        f"Invert trades: {'ON' if invert_trades else 'OFF'}  |  ML volatility gate: {'ON' if ml_volatility_gate_enabled else 'OFF'}"
     )
-    kb = settings_keyboard(autotrade, trade_amount, auto_redeem, demo_trade, demo_bankroll, trade_mode, trade_pct, invert_trades)
+    kb = settings_keyboard(autotrade, trade_amount, auto_redeem, demo_trade, demo_bankroll, trade_mode, trade_pct, invert_trades, ml_volatility_gate_enabled)
     if update.callback_query:
         await update.callback_query.answer()
         await _safe_edit(update.callback_query, text, reply_markup=kb)
@@ -568,6 +571,31 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.answer(f"Invert Trades {new_state}")
         await cmd_settings(update, context)
 
+    elif data == "toggle_ml_volatility_gate":
+        gate_enabled = await queries.get_ml_volatility_gate_enabled()
+        if gate_enabled:
+            await query.answer()
+            await _safe_edit(
+                query,
+                "\u26a0 <b>Disable ML volatility gate?</b>\n\n"
+                "Recommended: keep this enabled. Disabling it bypasses the live volatility regime safety check for ML signals only.\n\n"
+                "Tap <b>Disable Gate</b> to confirm, or keep it enabled.",
+                reply_markup=ml_volatility_gate_confirm_keyboard(),
+            )
+        else:
+            await queries.set_ml_volatility_gate_enabled(True)
+            await query.answer("ML volatility gate ON")
+            await cmd_settings(update, context)
+
+    elif data == "confirm_disable_ml_volatility_gate":
+        await queries.set_ml_volatility_gate_enabled(False)
+        await query.answer("ML volatility gate OFF")
+        await cmd_settings(update, context)
+
+    elif data == "cancel_disable_ml_volatility_gate":
+        await query.answer("ML volatility gate kept ON")
+        await cmd_settings(update, context)
+
     elif data == "cmd_demo":
         await _render_demo_stats(update, active="all")
 
@@ -841,7 +869,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         demo_trade = await queries.is_demo_trade_enabled()
         demo_bankroll = await queries.get_demo_bankroll()
         invert_trades = await queries.is_invert_trades_enabled()
-        kb = settings_keyboard(autotrade, trade_amount, auto_redeem, demo_trade, demo_bankroll, trade_mode, pct, invert_trades)
+        ml_volatility_gate_enabled = await queries.get_ml_volatility_gate_enabled()
+        kb = settings_keyboard(autotrade, trade_amount, auto_redeem, demo_trade, demo_bankroll, trade_mode, pct, invert_trades, ml_volatility_gate_enabled)
         await update.message.reply_text(
             f"\u2699\ufe0f <b>Settings</b>\nAutoTrade: {'ON' if autotrade else 'OFF'}  |  Mode: {'PCT' if trade_mode == 'pct' else 'FIXED'} {pct}%  |  Demo: {'ON' if demo_trade else 'OFF'}",
             reply_markup=kb,
@@ -876,7 +905,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         demo_trade = await queries.is_demo_trade_enabled()
         trade_amount = await queries.get_trade_amount()
         invert_trades = await queries.is_invert_trades_enabled()
-        kb = settings_keyboard(autotrade, trade_amount, auto_redeem, demo_trade, amount, trade_mode, trade_pct, invert_trades)
+        kb = settings_keyboard(autotrade, trade_amount, auto_redeem, demo_trade, amount, trade_mode, trade_pct, invert_trades, ml_volatility_gate_enabled)
         mode_summary = f"{trade_pct:.1f}%" if trade_mode == "pct" else f"${trade_amount:.2f}"
         await update.message.reply_text(
             f"\u2699\ufe0f <b>Settings</b>\nAutoTrade: {'ON' if autotrade else 'OFF'}  |  Mode: {mode_summary}  |  Demo: {'ON' if demo_trade else 'OFF'}",
@@ -955,10 +984,13 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     demo_trade = await queries.is_demo_trade_enabled()
     demo_bankroll = await queries.get_demo_bankroll()
     invert_trades = await queries.is_invert_trades_enabled()
+    ml_volatility_gate_enabled = await queries.get_ml_volatility_gate_enabled()
     mode_summary = f"{trade_pct:.1f}%" if trade_mode == "pct" else f"${amount:.2f}"
-    kb = settings_keyboard(autotrade, amount, auto_redeem, demo_trade, demo_bankroll, trade_mode, trade_pct, invert_trades)
+    kb = settings_keyboard(autotrade, amount, auto_redeem, demo_trade, demo_bankroll, trade_mode, trade_pct, invert_trades, ml_volatility_gate_enabled)
     await update.message.reply_text(
-        f"\u2699\ufe0f <b>Settings</b>\nAutoTrade: {'ON' if autotrade else 'OFF'}  |  Mode: {mode_summary}  |  Demo: {'ON' if demo_trade else 'OFF'}",
+        f"\u2699\ufe0f <b>Settings</b>\n"
+        f"AutoTrade: {'ON' if autotrade else 'OFF'}  |  Mode: {mode_summary}  |  Demo: {'ON' if demo_trade else 'OFF'}\n"
+        f"Invert trades: {'ON' if invert_trades else 'OFF'}  |  ML volatility gate: {'ON' if ml_volatility_gate_enabled else 'OFF'}",
         reply_markup=kb,
         parse_mode="HTML",
     )
