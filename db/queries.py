@@ -1204,6 +1204,271 @@ async def get_threshold_bucket_stats(
     return result
 
 
+def _safe_pct(numerator: float, denominator: float) -> float:
+    return round((numerator / denominator) * 100, 1) if denominator else 0.0
+
+
+async def get_threshold_dashboard_summary(channel: str) -> dict[str, Any]:
+    channel_n = _normalize_threshold_channel(channel)
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+
+        configured_row = await (await db.execute(
+            "SELECT COUNT(*) AS cnt FROM threshold_controls WHERE channel = ?",
+            (channel_n,),
+        )).fetchone()
+
+        actions = await (await db.execute(
+            "SELECT action, COUNT(*) AS cnt FROM threshold_controls WHERE channel = ? GROUP BY action",
+            (channel_n,),
+        )).fetchall()
+
+        summary_row = await (await db.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                COUNT(DISTINCT threshold_bucket) AS active_buckets,
+                SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skipped_count,
+                SUM(CASE WHEN is_win IS NOT NULL THEN 1 ELSE 0 END) AS resolved_count,
+                SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN is_win = 0 THEN 1 ELSE 0 END) AS losses,
+                MAX(slot_start) AS last_seen
+            FROM signals
+            WHERE threshold_channel = ? AND threshold_bucket IS NOT NULL
+            """,
+            (channel_n,),
+        )).fetchone()
+
+        needs_review_row = await (await db.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM (
+                SELECT threshold_bucket
+                FROM signals
+                WHERE threshold_channel = ? AND threshold_bucket IS NOT NULL
+                GROUP BY threshold_bucket
+                HAVING COUNT(*) >= 2
+                   AND (SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) > 0
+                        OR COUNT(DISTINCT COALESCE(threshold_action, 'DEFAULT')) > 1)
+            )
+            """,
+            (channel_n,),
+        )).fetchone()
+
+    configured = int((configured_row['cnt'] if configured_row else 0) or 0)
+    total = int((summary_row['total'] if summary_row else 0) or 0)
+    resolved = int((summary_row['resolved_count'] if summary_row else 0) or 0)
+    wins = int((summary_row['wins'] if summary_row else 0) or 0)
+    losses = int((summary_row['losses'] if summary_row else 0) or 0)
+    skipped = int((summary_row['skipped_count'] if summary_row else 0) or 0)
+    active_buckets = int((summary_row['active_buckets'] if summary_row else 0) or 0)
+    policy_mix = {str(row['action']).lower(): int(row['cnt'] or 0) for row in actions}
+    for key in ('follow', 'invert', 'block'):
+        policy_mix.setdefault(key, 0)
+    return {
+        'configured_count': configured,
+        'active_buckets': active_buckets,
+        'resolved_count': resolved,
+        'skipped_count': skipped,
+        'wins': wins,
+        'losses': losses,
+        'win_rate': _safe_pct(wins, wins + losses),
+        'last_seen': summary_row['last_seen'] if summary_row else None,
+        'policy_mix': policy_mix,
+        'needs_review_count': int((needs_review_row['cnt'] if needs_review_row else 0) or 0),
+        'observed_events': total,
+    }
+
+
+async def get_threshold_bucket_browser_rows(
+    channel: str,
+    filter_mode: str = 'all',
+    sort_mode: str = 'bucket',
+) -> list[dict[str, Any]]:
+    channel_n = _normalize_threshold_channel(channel)
+    controls = await list_threshold_controls(channel_n)
+    control_map = {row['bucket']: row for row in controls}
+    stats = await get_threshold_bucket_stats(channel_n)
+    stat_map = {row['bucket']: row for row in stats}
+
+    rows: list[dict[str, Any]] = []
+    for bucket in sorted(set(_all_threshold_buckets_from_data(control_map, stat_map))):
+        stat = stat_map.get(bucket, {})
+        control = control_map.get(bucket)
+        total = int(stat.get('total', 0) or 0)
+        skipped = int(stat.get('skipped_count', 0) or 0)
+        fired = int(stat.get('fired_count', 0) or 0)
+        wins = int(stat.get('wins', 0) or 0)
+        losses = int(stat.get('losses', 0) or 0)
+        resolved = wins + losses
+        review_pressure = skipped
+        if int(stat.get('action_count', 0) or 0) > 1:
+            review_pressure += 2
+        if int(stat.get('raw_side_count', 0) or 0) > 1 or int(stat.get('final_side_count', 0) or 0) > 1:
+            review_pressure += 1
+        action = str((control or {}).get('action') or 'default').lower()
+        row = {
+            'bucket': bucket,
+            'action': action,
+            'configured': control is not None,
+            'total': total,
+            'skipped_count': skipped,
+            'fired_count': fired,
+            'wins': wins,
+            'losses': losses,
+            'resolved': resolved,
+            'win_pct': _safe_pct(wins, resolved),
+            'avg_prob': float(stat.get('avg_prob', 0.0) or 0.0),
+            'last_seen': stat.get('last_seen'),
+            'mixed_actions': int(stat.get('action_count', 0) or 0) > 1,
+            'mixed_sides': int(stat.get('raw_side_count', 0) or 0) > 1 or int(stat.get('final_side_count', 0) or 0) > 1,
+            'review_pressure': review_pressure,
+        }
+        row['is_hot'] = resolved >= 3 and row['win_pct'] >= 60.0 and skipped == 0
+        row['needs_review'] = total >= 2 and (review_pressure > 0 or (resolved >= 3 and row['win_pct'] < 45.0))
+        rows.append(row)
+
+    if filter_mode == 'configured':
+        rows = [row for row in rows if row['configured']]
+    elif filter_mode == 'hot':
+        rows = [row for row in rows if row['is_hot']]
+    elif filter_mode == 'review':
+        rows = [row for row in rows if row['needs_review']]
+
+    if sort_mode == 'wr':
+        rows.sort(key=lambda r: (-r['is_hot'], -r['win_pct'], -r['resolved'], -r['total'], r['bucket']))
+    elif sort_mode == 'recent':
+        rows.sort(key=lambda r: (-r['review_pressure'], r['last_seen'] is None, str(r['last_seen'] or ''), -r['total'], r['bucket']), reverse=True)
+    elif sort_mode == 'activity':
+        rows.sort(key=lambda r: (-r['review_pressure'], -r['total'], -r['resolved'], -r['configured'], r['bucket']))
+    else:
+        rows.sort(key=lambda r: (-r['configured'], r['bucket']))
+    return rows
+
+
+def _all_threshold_buckets_from_data(*maps: dict[str, Any]) -> set[str]:
+    buckets: set[str] = set()
+    for mapping in maps:
+        buckets.update(mapping.keys())
+    return buckets or {truncate_probability_bucket(i / 100) for i in range(50, 100)}
+
+
+async def get_threshold_bucket_detail(channel: str, bucket: str) -> dict[str, Any]:
+    channel_n = _normalize_threshold_channel(channel)
+    bucket_n = _normalize_threshold_bucket(bucket)
+    control = await get_threshold_control(channel_n, bucket_n)
+    breakdown = await get_threshold_bucket_stats(channel_n, breakdown=True)
+    bucket_rows = [row for row in breakdown if row['bucket'] == bucket_n]
+    browser_rows = await get_threshold_bucket_browser_rows(channel_n, filter_mode='all', sort_mode='bucket')
+    current_index = next((idx for idx, row in enumerate(browser_rows) if row['bucket'] == bucket_n), None)
+    nearby: list[dict[str, Any]] = []
+    if current_index is not None:
+        for idx in range(max(0, current_index - 2), min(len(browser_rows), current_index + 3)):
+            if idx == current_index:
+                continue
+            nearby.append(browser_rows[idx])
+
+    totals = {
+        'total': 0,
+        'skipped_count': 0,
+        'fired_count': 0,
+        'wins': 0,
+        'losses': 0,
+        'avg_prob_sum': 0.0,
+        'avg_prob_count': 0,
+        'last_seen': None,
+    }
+    for row in bucket_rows:
+        totals['total'] += int(row['total'] or 0)
+        totals['skipped_count'] += int(row['skipped_count'] or 0)
+        totals['fired_count'] += int(row['fired_count'] or 0)
+        totals['wins'] += int(row['wins'] or 0)
+        totals['losses'] += int(row['losses'] or 0)
+        if row.get('avg_prob') is not None:
+            totals['avg_prob_sum'] += float(row['avg_prob'] or 0.0) * int(row['total'] or 0)
+            totals['avg_prob_count'] += int(row['total'] or 0)
+        if row.get('last_seen') and (totals['last_seen'] is None or str(row['last_seen']) > str(totals['last_seen'])):
+            totals['last_seen'] = row['last_seen']
+
+    avg_prob = (totals['avg_prob_sum'] / totals['avg_prob_count']) if totals['avg_prob_count'] else 0.0
+    wins = totals['wins']
+    losses = totals['losses']
+    recommendation = None
+    if wins + losses >= 3:
+        wr = _safe_pct(wins, wins + losses)
+        if wr >= 60.0 and totals['skipped_count'] == 0:
+            recommendation = 'Lean FOLLOW: bucket is resolving cleanly with positive hit rate.'
+        elif totals['skipped_count'] >= max(2, totals['fired_count']):
+            recommendation = 'Lean BLOCK: bucket is mostly skipping or being suppressed.'
+        elif wr < 45.0 and totals['fired_count'] >= 3:
+            recommendation = 'Lean REVIEW: realized win rate is weak for the current policy.'
+
+    return {
+        'bucket': bucket_n,
+        'channel': channel_n,
+        'configured_action': str((control or {}).get('action') or 'default').lower(),
+        'totals': {
+            'total': totals['total'],
+            'skipped_count': totals['skipped_count'],
+            'fired_count': totals['fired_count'],
+            'wins': wins,
+            'losses': losses,
+            'resolved': wins + losses,
+            'win_pct': _safe_pct(wins, wins + losses),
+            'avg_prob': avg_prob,
+            'last_seen': totals['last_seen'],
+        },
+        'breakdown': bucket_rows,
+        'nearby': nearby,
+        'recommendation': recommendation,
+    }
+
+
+async def get_threshold_policy_summary(channel: str) -> dict[str, Any]:
+    channel_n = _normalize_threshold_channel(channel)
+    controls = await list_threshold_controls(channel_n)
+    stats = await get_threshold_bucket_stats(channel_n)
+    stat_map = {row['bucket']: row for row in stats}
+    rows = []
+    for control in controls:
+        bucket = control['bucket']
+        stat = stat_map.get(bucket, {})
+        wins = int(stat.get('wins', 0) or 0)
+        losses = int(stat.get('losses', 0) or 0)
+        rows.append({
+            'bucket': bucket,
+            'action': str(control['action']).lower(),
+            'total': int(stat.get('total', 0) or 0),
+            'resolved': wins + losses,
+            'win_pct': _safe_pct(wins, wins + losses),
+            'last_seen': stat.get('last_seen'),
+        })
+
+    counts = {'follow': 0, 'invert': 0, 'block': 0}
+    for row in rows:
+        counts[row['action']] = counts.get(row['action'], 0) + 1
+    return {'rows': rows, 'counts': counts}
+
+
+async def get_threshold_recent_changes(channel: str, limit: int = 8) -> list[dict[str, Any]]:
+    channel_n = _normalize_threshold_channel(channel)
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT channel, bucket, action, created_at, updated_at
+            FROM threshold_controls
+            WHERE channel = ?
+            ORDER BY COALESCE(updated_at, created_at) DESC, bucket ASC
+            LIMIT ?
+            """,
+            (channel_n, limit),
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+
 # ---------------------------------------------------------------------------
 # Model registry helpers
 # ---------------------------------------------------------------------------

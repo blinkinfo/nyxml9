@@ -1152,46 +1152,143 @@ def format_drift_alert(drifted_features: list, records_analyzed: int) -> str:
     return "\n".join(lines)
 
 
-def format_threshold_controls_overview(channel: str, controls: list[dict[str, Any]], stats: list[dict[str, Any]]) -> str:
-    title = f"Threshold Controls ({channel.upper()})"
-    lines = [f"\U0001f3af <b>{title}</b>", SEP]
-    if controls:
-        lines.append(f"Configured buckets: {len(controls)}")
-        preview = controls[:8]
-        for row in preview:
-            lines.append(f"- {row['bucket']}: {str(row['action']).upper()}")
-        if len(controls) > len(preview):
-            lines.append(f"- ... and {len(controls) - len(preview)} more")
-    else:
-        lines.append("No per-bucket overrides. Default behavior applies.")
+def _fmt_short_ts(value: Any) -> str:
+    if not value:
+        return 'n/a'
+    text = str(value)
+    return text[:16] if len(text) >= 16 else text
 
-    lines.append(SEP)
-    if stats:
-        lines.append("Recent bucket stats:")
-        for row in stats[:6]:
-            slices_note = ""
-            if (row.get('action_count', 0) > 1) or (row.get('raw_side_count', 0) > 1) or (row.get('final_side_count', 0) > 1):
-                slices_note = (
-                    f"  [slices: actions={row.get('action_count', 0)} raw={row.get('raw_side_count', 0)} final={row.get('final_side_count', 0)}]"
-                )
+
+def format_threshold_controls_overview(channel: str, summary: dict[str, Any], highlights: list[dict[str, Any]]) -> str:
+    title = f"Threshold Dashboard ({channel.upper()})"
+    mix = summary.get('policy_mix', {})
+    lines = [
+        f"\U0001f3af <b>{title}</b>",
+        SEP,
+        f"Buckets live: {summary.get('active_buckets', 0)}  |  Overrides: {summary.get('configured_count', 0)}  |  Review: {summary.get('needs_review_count', 0)}",
+        f"Resolved: {summary.get('resolved_count', 0)}  |  Skipped: {summary.get('skipped_count', 0)}  |  Win rate: {summary.get('win_rate', 0.0):.1f}%",
+        f"Policy mix: F {mix.get('follow', 0)}  I {mix.get('invert', 0)}  B {mix.get('block', 0)}  |  Last: {_fmt_short_ts(summary.get('last_seen'))}",
+        f"Observed events: {summary.get('observed_events', 0)}",
+        SEP,
+    ]
+    if highlights:
+        lines.append('Priority buckets:')
+        for row in highlights[:5]:
+            marker = 'HOT' if row.get('is_hot') else ('REVIEW' if row.get('needs_review') else 'WATCH')
+            action = str(row.get('action') or 'default').upper()
             lines.append(
-                f"- {row['bucket']}: total={row['total']} fired={row['fired_count']} skipped={row['skipped_count']} wins={row['wins']} losses={row['losses']} wr={row['win_pct']}%{slices_note}"
+                f"- {row['bucket']}  {marker}  {action}  wr {row.get('win_pct', 0.0):.1f}%  resolved {row.get('resolved', 0)}  skip {row.get('skipped_count', 0)}"
             )
     else:
-        lines.append("No threshold bucket history yet.")
+        lines.append('No threshold bucket history yet.')
+    return '\n'.join(lines)
 
-    return "\n".join(lines)
 
-
-def format_threshold_bucket_detail(channel: str, bucket: str, action: str | None, stats: list[dict[str, Any]]) -> str:
-    lines = [f"\U0001f50d <b>Bucket {bucket} ({channel.upper()})</b>", SEP]
-    lines.append(f"Configured action: {(action or 'default').upper()}")
-    if not stats:
-        lines.append("No signals have hit this bucket yet.")
-        return "\n".join(lines)
-    for row in stats[:8]:
-        final_side = row['final_side'] or 'BLOCKED'
+def format_threshold_bucket_browser(channel: str, filter_mode: str, sort_mode: str, rows: list[dict[str, Any]], offset: int, page_size: int = 8) -> str:
+    view = rows[offset:offset + page_size]
+    title_map = {
+        'all': 'All Buckets',
+        'configured': 'Configured Only',
+        'hot': 'Hot Buckets',
+        'review': 'Needs Review',
+    }
+    sort_label = {'bucket': 'Bucket', 'wr': 'Win Rate', 'recent': 'Recent', 'activity': 'Activity'}.get(sort_mode, sort_mode.title())
+    lines = [
+        f"\U0001f4ca <b>{title_map.get(filter_mode, 'Buckets')} ({channel.upper()})</b>",
+        f"View: {filter_mode.upper()}  |  Sort: {sort_label}  |  Rows {offset + 1 if view else 0}-{offset + len(view)} of {len(rows)}",
+        SEP,
+    ]
+    if not view:
+        lines.append('No buckets match this view.')
+        return '\n'.join(lines)
+    for row in view:
+        tag = 'HOT' if row.get('is_hot') else ('REV' if row.get('needs_review') else ('CFG' if row.get('configured') else 'OBS'))
+        wr = f"{row.get('win_pct', 0.0):.1f}%" if row.get('resolved', 0) else '--'
         lines.append(
-            f"- {row['raw_side']} -> {final_side} via {str(row['action']).upper()}: total={row['total']} skipped={row['skipped_count']} wins={row['wins']} losses={row['losses']} wr={row['win_pct']}% avg_p={row['avg_prob']:.4f}"
+            f"{tag} {row['bucket']}  {str(row.get('action') or 'default').upper()}  wr {wr}  r {row.get('resolved', 0)}  s {row.get('skipped_count', 0)}  n {row.get('total', 0)}"
         )
-    return "\n".join(lines)
+    lines.append(SEP)
+    lines.append('HOT = clean winner, REV = investigate, CFG = override set, OBS = history only.')
+    return '\n'.join(lines)
+
+
+def format_threshold_bucket_detail(detail: dict[str, Any]) -> str:
+    totals = detail['totals']
+    lines = [
+        f"\U0001f50d <b>Bucket {detail['bucket']} ({detail['channel'].upper()})</b>",
+        SEP,
+        f"Policy now: {detail['configured_action'].upper()}",
+        f"Resolved: {totals['resolved']}  |  Wins: {totals['wins']}  |  Losses: {totals['losses']}  |  Win rate: {totals.get('win_pct', 0.0):.1f}%",
+        f"Fired: {totals['fired_count']}  |  Skipped: {totals['skipped_count']}  |  Avg prob: {totals['avg_prob']:.4f}",
+        f"Last seen: {_fmt_short_ts(totals['last_seen'])}",
+        SEP,
+    ]
+    if detail['breakdown']:
+        lines.append('Policy slices:')
+        for row in detail['breakdown'][:6]:
+            final_side = row['final_side'] or 'BLOCKED'
+            lines.append(
+                f"- {row['raw_side']} -> {final_side} via {str(row['action']).upper()}: n {row['total']}  wr {row['win_pct']:.1f}%  avg {row['avg_prob']:.4f}"
+            )
+    else:
+        lines.append('No signals have hit this bucket yet.')
+    if detail.get('nearby'):
+        lines.append(SEP)
+        lines.append('Nearby buckets:')
+        for row in detail['nearby'][:4]:
+            lines.append(
+                f"- {row['bucket']}  {str(row.get('action') or 'default').upper()}  wr {row.get('win_pct', 0.0):.1f}%  n {row.get('total', 0)}"
+            )
+    if detail.get('recommendation'):
+        lines.append(SEP)
+        lines.append(f"Operator note: {detail['recommendation']}")
+    return '\n'.join(lines)
+
+
+def format_threshold_policy_summary(channel: str, summary: dict[str, Any]) -> str:
+    counts = summary.get('counts', {})
+    rows = summary.get('rows', [])
+    lines = [
+        f"\U0001f4dd <b>Policy Summary ({channel.upper()})</b>",
+        SEP,
+        f"FOLLOW: {counts.get('follow', 0)}  |  INVERT: {counts.get('invert', 0)}  |  BLOCK: {counts.get('block', 0)}",
+    ]
+    if not rows:
+        lines.append('No configured overrides yet.')
+        return '\n'.join(lines)
+    lines.append(SEP)
+    for row in rows[:8]:
+        lines.append(
+            f"- {row['bucket']}  {row['action'].upper()}  wr {row['win_pct']:.1f}%  n {row['total']}  last {_fmt_short_ts(row.get('last_seen'))}"
+        )
+    return '\n'.join(lines)
+
+
+def format_threshold_recent_changes(channel: str, rows: list[dict[str, Any]]) -> str:
+    lines = [f"\U0001f551 <b>Recent Changes ({channel.upper()})</b>", SEP]
+    if not rows:
+        lines.append('No recent threshold control changes recorded.')
+        return '\n'.join(lines)
+    for row in rows:
+        when = _fmt_short_ts(row.get('updated_at') or row.get('created_at'))
+        lines.append(f"- {when}  {row['bucket']} -> {str(row['action']).upper()}")
+    return '\n'.join(lines)
+
+
+def format_threshold_help(channel: str) -> str:
+    return '\n'.join([
+        f"\u2753 <b>Threshold Help and Legend ({channel.upper()})</b>",
+        SEP,
+        'Views:',
+        '- All Buckets: every observed or configurable bucket.',
+        '- Configured Only: buckets with explicit FOLLOW, INVERT, or BLOCK.',
+        '- Hot Buckets: at least 3 resolved results with 60%+ win rate.',
+        '- Needs Review: mixed behavior, skips, or conflicting policy slices.',
+        SEP,
+        'Policy:',
+        '- FOLLOW keeps the raw model side.',
+        '- INVERT flips the raw side before execution.',
+        '- BLOCK suppresses execution for that bucket.',
+        SEP,
+        'Browser legend: HOT strong history, REV review candidate, CFG configured override, OBS observed only.',
+    ])

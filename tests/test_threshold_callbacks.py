@@ -5,36 +5,94 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from bot.keyboards import settings_keyboard, threshold_bucket_action_keyboard, threshold_bucket_keyboard
-from bot.formatters import format_threshold_bucket_detail, format_threshold_controls_overview
+from bot.formatters import (
+    format_threshold_bucket_browser,
+    format_threshold_bucket_detail,
+    format_threshold_controls_overview,
+    format_threshold_help,
+    format_threshold_policy_summary,
+    format_threshold_recent_changes,
+)
 
 
 def test_threshold_bucket_keyboard_contains_bucket_callbacks():
-    kb = threshold_bucket_keyboard('real', ['0.50', '0.51', '0.52'], offset=0, page_size=2)
-    rows = kb.inline_keyboard
-    assert rows[0][0].callback_data == 'threshold_bucket_real_0.50'
-    assert rows[1][0].callback_data == 'threshold_bucket_real_0.51'
+    rows = [
+        {'bucket': '0.50', 'action': 'default', 'resolved': 0, 'total': 0, 'win_pct': 0.0, 'is_hot': False, 'needs_review': False, 'configured': False},
+        {'bucket': '0.51', 'action': 'follow', 'resolved': 2, 'total': 2, 'win_pct': 50.0, 'is_hot': False, 'needs_review': True, 'configured': True},
+        {'bucket': '0.52', 'action': 'invert', 'resolved': 3, 'total': 3, 'win_pct': 66.7, 'is_hot': True, 'needs_review': False, 'configured': True},
+    ]
+    kb = threshold_bucket_keyboard('real', rows, filter_mode='configured', sort_mode='wr', offset=0, page_size=2)
+    keys = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+    assert 'threshold_bucket_real_0.50_configured_wr_0' in keys
+    assert 'threshold_bucket_real_0.51_configured_wr_0' in keys
+    assert 'thresholds_browse_real_configured_wr_0' in keys
 
 
-def test_threshold_action_keyboard_contains_all_actions():
-    kb = threshold_bucket_action_keyboard('demo', '0.58')
+def test_threshold_action_keyboard_contains_all_actions_and_back_callback():
+    kb = threshold_bucket_action_keyboard('demo', '0.58', back_callback='thresholds_browse_demo_hot_wr_8')
     actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
     assert 'threshold_set_demo_0.58_follow' in actions
     assert 'threshold_set_demo_0.58_invert' in actions
     assert 'threshold_set_demo_0.58_block' in actions
     assert 'threshold_clear_demo_0.58' in actions
+    assert 'thresholds_browse_demo_hot_wr_8' in actions
 
 
-def test_threshold_formatters_render_expected_details():
-    overview = format_threshold_controls_overview('real', [{'bucket': '0.58', 'action': 'invert'}], [
-        {'bucket': '0.58', 'total': 3, 'skipped_count': 0, 'fired_count': 3, 'wins': 2, 'losses': 1, 'win_pct': 66.7, 'action_count': 1, 'raw_side_count': 1, 'final_side_count': 1}
+def test_threshold_formatters_render_dashboard_browser_and_detail():
+    overview = format_threshold_controls_overview('real', {
+        'configured_count': 3,
+        'active_buckets': 5,
+        'resolved_count': 8,
+        'skipped_count': 2,
+        'win_rate': 62.5,
+        'last_seen': '2025-01-01 00:00:00 UTC',
+        'policy_mix': {'follow': 1, 'invert': 1, 'block': 1},
+        'needs_review_count': 1,
+        'observed_events': 10,
+    }, [
+        {'bucket': '0.58', 'action': 'invert', 'win_pct': 66.7, 'resolved': 3, 'last_seen': '2025-01-01 00:00:00 UTC', 'is_hot': True, 'needs_review': False}
     ])
-    assert '0.58' in overview
-    assert 'INVERT' in overview
-    detail = format_threshold_bucket_detail('demo', '0.67', 'block', [
-        {'raw_side': 'Down', 'final_side': None, 'action': 'BLOCK', 'total': 4, 'skipped_count': 4, 'wins': 0, 'losses': 0, 'win_pct': 0.0, 'avg_prob': 0.6791}
-    ])
+    assert 'Threshold Dashboard (REAL)' in overview
+    assert 'Policy mix: F 1  I 1  B 1' in overview
+
+    browser = format_threshold_bucket_browser('demo', 'review', 'recent', [
+        {'bucket': '0.67', 'action': 'block', 'resolved': 0, 'total': 4, 'skipped_count': 4, 'win_pct': 0.0, 'is_hot': False, 'needs_review': True, 'configured': True}
+    ], 0)
+    assert 'Needs Review (DEMO)' in browser
+    assert 'REV 0.67' in browser
+
+    detail = format_threshold_bucket_detail({
+        'bucket': '0.67',
+        'channel': 'demo',
+        'configured_action': 'block',
+        'totals': {'resolved': 0, 'wins': 0, 'losses': 0, 'win_pct': 0.0, 'fired_count': 0, 'skipped_count': 4, 'avg_prob': 0.6791, 'last_seen': '2025-01-01 00:00:00 UTC'},
+        'breakdown': [
+            {'raw_side': 'Down', 'final_side': None, 'action': 'BLOCK', 'total': 4, 'win_pct': 0.0, 'avg_prob': 0.6791}
+        ],
+        'nearby': [
+            {'bucket': '0.66', 'action': 'follow', 'win_pct': 55.0, 'total': 2}
+        ],
+        'recommendation': 'Lean BLOCK: bucket is mostly skipping or being suppressed.',
+    })
     assert 'Bucket 0.67 (DEMO)' in detail
     assert 'BLOCKED' in detail
+    assert 'Operator note:' in detail
+
+
+def test_threshold_summary_changes_and_help_formatters():
+    summary = format_threshold_policy_summary('real', {
+        'counts': {'follow': 1, 'invert': 2, 'block': 1},
+        'rows': [
+            {'bucket': '0.55', 'action': 'follow', 'win_pct': 60.0, 'total': 3, 'last_seen': '2025-01-01 00:00:00 UTC'}
+        ],
+    })
+    changes = format_threshold_recent_changes('real', [
+        {'bucket': '0.55', 'action': 'follow', 'updated_at': '2025-01-01 00:00:00 UTC'}
+    ])
+    help_text = format_threshold_help('demo')
+    assert 'Policy Summary (REAL)' in summary
+    assert 'Recent Changes (REAL)' in changes
+    assert 'Threshold Help and Legend (DEMO)' in help_text
 
 
 def test_settings_keyboard_exposes_threshold_controls_entry():
@@ -49,3 +107,5 @@ def test_threshold_channel_keyboard_returns_to_settings():
     kb = threshold_channel_keyboard('real')
     actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
     assert 'cmd_settings' in actions
+    assert 'thresholds_policy_real' in actions
+    assert 'thresholds_help_real' in actions
