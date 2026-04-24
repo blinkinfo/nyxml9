@@ -237,6 +237,9 @@ def main() -> None:
                 BotCommand("promote_model", "Promote candidate to current"),
                 BotCommand("retrain",       "Retrain ML model in background"),
                 BotCommand("set_threshold", "Set ML signal threshold (0.50-0.95)"),
+                BotCommand("set_down_threshold", "Set ML DOWN threshold (0.50-0.95)"),
+                BotCommand("set_blocked_ranges", "Set blocked ML probability bands"),
+                BotCommand("show_blocked_ranges", "Show blocked ML probability bands"),
                 BotCommand("help",          "Help & command reference"),
             ])
         except Exception:

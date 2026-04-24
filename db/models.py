@@ -122,6 +122,13 @@ async def init_db(db_path: str | None = None) -> None:
         await db.execute(
             "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_down_threshold', '0.47')"
         )
+        default_ranges = ",".join(
+            f"{lo:.2f}-{hi:.2f}" for lo, hi in getattr(cfg, "BLOCKED_THRESHOLD_RANGES", [(0.20, 0.22)])
+        )
+        await db.execute(
+            "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('blocked_threshold_ranges', ?)",
+            (default_ranges,),
+        )
         await db.commit()
 
 
@@ -265,6 +272,18 @@ async def migrate_db(db_path: str | None = None) -> None:
             )
         except Exception as e:
             log.warning("migrate_db: ml_down_threshold seed failed: %s", e)
+
+        # --- seed default blocked threshold ranges (config.BLOCKED_THRESHOLD_RANGES default) ---
+        try:
+            default_ranges = ",".join(
+                f"{lo:.2f}-{hi:.2f}" for lo, hi in getattr(cfg, "BLOCKED_THRESHOLD_RANGES", [(0.20, 0.22)])
+            )
+            await db.execute(
+                "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('blocked_threshold_ranges', ?)",
+                (default_ranges,),
+            )
+        except Exception as e:
+            log.warning("migrate_db: blocked_threshold_ranges seed failed: %s", e)
 
         # --- seed default settings ---
         for key, value in DEFAULT_SETTINGS.items():

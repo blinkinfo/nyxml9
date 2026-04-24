@@ -72,6 +72,32 @@ def _parse_ml_threshold(raw: str) -> float:
         raise ValueError("out of range")
     return threshold
 
+
+def _parse_blocked_ranges(raw: str) -> list[tuple[float, float]] | None:
+    """Parse a Telegram argument like '0.20-0.22,0.40-0.42' into range tuples.
+
+    Returns None if the input is invalid (caller should show usage).
+    """
+    ranges: list[tuple[float, float]] = []
+    if not raw or not raw.strip() or raw.strip().lower() == "none":
+        return ranges
+    for part in raw.split(","):
+        part = part.strip()
+        if "-" not in part:
+            return None
+        lo_str, _, hi_str = part.partition("-")
+        try:
+            lo = float(lo_str.strip())
+            hi = float(hi_str.strip())
+        except ValueError:
+            return None
+        if not (0.0 <= lo <= 1.0 and 0.0 <= hi <= 1.0):
+            return None
+        if lo > hi:
+            lo, hi = hi, lo
+        ranges.append((lo, hi))
+    return ranges
+
 # Set at startup by main.py
 _start_time: datetime = datetime.now(timezone.utc)
 _poly_client: Any = None
@@ -1040,6 +1066,8 @@ def register(application) -> None:
     # ML model management commands
     application.add_handler(CommandHandler("set_threshold",      cmd_set_threshold))
     application.add_handler(CommandHandler("set_down_threshold", cmd_set_down_threshold))
+    application.add_handler(CommandHandler("set_blocked_ranges",  cmd_set_blocked_ranges))
+    application.add_handler(CommandHandler("show_blocked_ranges", cmd_show_blocked_ranges))
     application.add_handler(CommandHandler("model_status",   cmd_model_status))
     application.add_handler(CommandHandler("model_compare",  cmd_model_compare))
     application.add_handler(CommandHandler("promote_model",  cmd_promote_model))
@@ -1114,6 +1142,63 @@ async def cmd_set_down_threshold(update: Update, context: ContextTypes.DEFAULT_T
         format_set_down_threshold(threshold),
         parse_mode="HTML",
     )
+
+
+@auth_check
+async def cmd_set_blocked_ranges(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set blocked threshold ranges. Usage: /set_blocked_ranges 0.20-0.22,0.40-0.42"""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /set_blocked_ranges <ranges>\n"
+            "Example: <code>/set_blocked_ranges 0.20-0.22,0.40-0.42</code>\n"
+            "Or send <code>/set_blocked_ranges none</code> to clear all blocked ranges.",
+            parse_mode="HTML",
+        )
+        return
+    ranges_str = " ".join(context.args).strip()
+    parsed = _parse_blocked_ranges(ranges_str)
+    if parsed is None:
+        await update.message.reply_text(
+            "Invalid format. Use comma-separated <code>low-high</code> pairs.\n"
+            "Example: <code>/set_blocked_ranges 0.20-0.22,0.40-0.42</code>",
+            parse_mode="HTML",
+        )
+        return
+    await queries.set_blocked_threshold_ranges(parsed)
+    if not parsed:
+        text = (
+            "<b>Blocked threshold ranges cleared.</b>\n"
+            "No probability bands are currently blocked."
+        )
+    else:
+        ranges_display = ", ".join(f"[{lo:.2f}, {hi:.2f}]" for lo, hi in parsed)
+        text = (
+            f"<b>Blocked threshold ranges updated.</b>\n"
+            f"Active blocked ranges: {ranges_display}\n"
+            f"Signals with P(UP) or P(DOWN) inside any of these bands will be suppressed."
+        )
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=ml_menu())
+
+
+@auth_check
+async def cmd_show_blocked_ranges(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show current blocked threshold ranges."""
+    ranges = await queries.get_blocked_threshold_ranges()
+    if not ranges:
+        text = (
+            "<b>Blocked Threshold Ranges</b>\n"
+            "None - no probability bands are blocked.\n"
+            "Use <code>/set_blocked_ranges 0.20-0.22</code> to add one."
+        )
+    else:
+        lines = "\n".join(f"  [{lo:.2f}, {hi:.2f}]" for lo, hi in ranges)
+        text = (
+            f"<b>Blocked Threshold Ranges</b>\n"
+            f"Active ranges ({len(ranges)}):\n"
+            f"{lines}\n\n"
+            "Signals with P(UP) or P(DOWN) inside any blocked band are suppressed."
+        )
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=ml_menu())
 
 
 @auth_check

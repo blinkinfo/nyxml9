@@ -445,6 +445,69 @@ class MLStrategy(BaseStrategy):
                         "MLStrategy: regime gate check failed (non-fatal, continuing): %s", _rge
                     )
 
+            # ------------------------------------------------------------------
+            # Blocked threshold ranges -- suppress signals when P(UP) or P(DOWN)
+            # falls inside a configured blocked probability band.
+            #
+            # Ranges are stored in ml_config (hot-reconfigurable via /set_blocked_ranges)
+            # with a fallback to cfg.BLOCKED_THRESHOLD_RANGES from env.
+            # Each range is inclusive: low <= prob <= high -> block.
+            # Designed identically to the regime gate: fires post-inference so the
+            # log always contains what the model produced, audit-friendly.
+            # ------------------------------------------------------------------
+            _blocked_ranges = await queries.get_blocked_threshold_ranges()
+            _range_hit = None
+            for _lo, _hi in _blocked_ranges:
+                if _lo <= prob <= _hi:
+                    _range_hit = _lo, _hi, "UP"
+                    break
+                if _lo <= prob_down <= _hi:
+                    _range_hit = _lo, _hi, "DOWN"
+                    break
+
+            if _range_hit is not None:
+                _r_lo, _r_hi, _r_dir = _range_hit
+                _blocked_skip_reason = (
+                    f"Threshold blocked: p_{_r_dir.lower()}={prob if _r_dir == 'UP' else prob_down:.4f} "
+                    f"in blocked range [{_r_lo:.2f}, {_r_hi:.2f}] - signal suppressed"
+                )
+                log.warning("MLStrategy: %s", _blocked_skip_reason)
+                inference_logger.log_inference(
+                    slot_slug=slug,
+                    slot_ts=slot_ts,
+                    slot_start_str=slot_start_str,
+                    slot_end_str=slot_end_str,
+                    df5_rows=df5_rows,
+                    df15_rows=df15_rows,
+                    df1h_rows=df1h_rows,
+                    cvd_rows=cvd_rows,
+                    funding_buf_len=funding_buf_len,
+                    candle_n1_ts=candle_n1_ts,
+                    candle_n1_close=candle_n1_close,
+                    candle_n1_vol=candle_n1_vol,
+                    feature_names=FEATURE_COLS,
+                    feature_row=feature_row,
+                    nan_features=[],
+                    p_up=prob,
+                    p_down=prob_down,
+                    up_threshold=up_threshold,
+                    down_threshold=down_threshold,
+                    down_enabled=down_enabled,
+                    fired=False,
+                    side=None,
+                    skip_reason=_blocked_skip_reason,
+                )
+                return {
+                    **base_fields,
+                    "pattern": f"p={prob:.4f} [threshold_blocked:{_r_lo:.2f}-{_r_hi:.2f}]",
+                    "reason": _blocked_skip_reason,
+                    "ml_p_up":           prob,
+                    "ml_p_down":         prob_down,
+                    "ml_up_threshold":   up_threshold,
+                    "ml_down_threshold": down_threshold,
+                    "ml_down_enabled":   down_enabled,
+                }
+
             down_qualifies = down_enabled and (prob_down >= down_threshold)
 
             # Determine direction:

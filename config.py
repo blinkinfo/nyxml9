@@ -101,3 +101,39 @@ BLOCKED_TRADE_HOURS_UTC: frozenset[int] = frozenset(
     for h in os.getenv("BLOCKED_TRADE_HOURS_UTC", "3,17").split(",")
     if h.strip().isdigit()
 )
+
+# ---------------------------------------------------------------------------
+# Blocked Threshold Ranges
+# ---------------------------------------------------------------------------
+# Probability ranges during which signals are suppressed.
+# Comma-separated <low>-<high> pairs in env.
+# Default: 0.20-0.22 blocks P(UP) in [0.20, 0.22].
+# Each range is inclusive on both ends: low <= prob <= high -> block.
+# Set to empty string to disable (no ranges blocked).
+# Parsed as list of (low, high) tuples.
+
+
+def _parse_blocked_ranges(raw: str) -> list[tuple[float, float]]:
+    """Parse '0.20-0.22,0.40-0.42' -> [(0.20, 0.22), (0.40, 0.42)]."""
+    ranges: list[tuple[float, float]] = []
+    if not raw or not raw.strip():
+        return ranges
+    for part in raw.split(","):
+        part = part.strip()
+        if "-" not in part:
+            continue
+        lo_str, _, hi_str = part.partition("-")
+        try:
+            lo = float(lo_str.strip())
+            hi = float(hi_str.strip())
+        except ValueError:
+            continue
+        if lo > hi:
+            lo, hi = hi, lo
+        ranges.append((lo, hi))
+    return ranges
+
+
+BLOCKED_THRESHOLD_RANGES: list[tuple[float, float]] = _parse_blocked_ranges(
+    os.getenv("BLOCKED_THRESHOLD_RANGES", "0.20-0.22")
+)
