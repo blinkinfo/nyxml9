@@ -1120,30 +1120,55 @@ async def list_threshold_controls(channel: str) -> list[dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
-async def get_threshold_bucket_stats(channel: str, limit: int | None = None) -> list[dict[str, Any]]:
+async def get_threshold_bucket_stats(
+    channel: str,
+    limit: int | None = None,
+    breakdown: bool = False,
+) -> list[dict[str, Any]]:
     channel_n = _normalize_threshold_channel(channel)
     limit_clause = ""
     params: list[Any] = [channel_n]
     if limit is not None:
         limit_clause = " LIMIT ?"
         params.append(limit)
-    query = (
-        "SELECT threshold_bucket AS bucket, threshold_action AS action, raw_side, final_side, "
-        "COUNT(*) AS total, "
-        "SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skipped_count, "
-        "SUM(CASE WHEN skipped = 0 THEN 1 ELSE 0 END) AS fired_count, "
-        "SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) AS wins, "
-        "SUM(CASE WHEN is_win = 0 THEN 1 ELSE 0 END) AS losses, "
-        "AVG(threshold_bucket_prob) AS avg_prob, "
-        "MAX(slot_start) AS last_seen "
-        "FROM signals WHERE threshold_channel = ? AND threshold_bucket IS NOT NULL "
-        "GROUP BY threshold_bucket, threshold_action, raw_side, final_side "
-        "ORDER BY threshold_bucket ASC, threshold_action ASC, raw_side ASC" + limit_clause
-    )
+
+    if breakdown:
+        query = (
+            "SELECT threshold_bucket AS bucket, threshold_action AS action, raw_side, final_side, "
+            "COUNT(*) AS total, "
+            "SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skipped_count, "
+            "SUM(CASE WHEN skipped = 0 THEN 1 ELSE 0 END) AS fired_count, "
+            "SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) AS wins, "
+            "SUM(CASE WHEN is_win = 0 THEN 1 ELSE 0 END) AS losses, "
+            "AVG(threshold_bucket_prob) AS avg_prob, "
+            "MAX(slot_start) AS last_seen "
+            "FROM signals WHERE threshold_channel = ? AND threshold_bucket IS NOT NULL "
+            "GROUP BY threshold_bucket, threshold_action, raw_side, final_side "
+            "ORDER BY threshold_bucket ASC, threshold_action ASC, raw_side ASC, final_side ASC" + limit_clause
+        )
+    else:
+        query = (
+            "SELECT threshold_bucket AS bucket, "
+            "COUNT(*) AS total, "
+            "SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skipped_count, "
+            "SUM(CASE WHEN skipped = 0 THEN 1 ELSE 0 END) AS fired_count, "
+            "SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) AS wins, "
+            "SUM(CASE WHEN is_win = 0 THEN 1 ELSE 0 END) AS losses, "
+            "AVG(threshold_bucket_prob) AS avg_prob, "
+            "MAX(slot_start) AS last_seen, "
+            "COUNT(DISTINCT threshold_action) AS action_count, "
+            "COUNT(DISTINCT COALESCE(raw_side, '')) AS raw_side_count, "
+            "COUNT(DISTINCT COALESCE(final_side, '')) AS final_side_count "
+            "FROM signals WHERE threshold_channel = ? AND threshold_bucket IS NOT NULL "
+            "GROUP BY threshold_bucket "
+            "ORDER BY threshold_bucket ASC" + limit_clause
+        )
+
     async with aiosqlite.connect(_db()) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(query, tuple(params))
         rows = await cursor.fetchall()
+
     result = []
     for row in rows:
         total = row["total"] or 0
@@ -1151,11 +1176,8 @@ async def get_threshold_bucket_stats(channel: str, limit: int | None = None) -> 
         losses = row["losses"] or 0
         resolved = wins + losses
         win_pct = round((wins / resolved) * 100, 1) if resolved else 0.0
-        result.append({
+        item = {
             "bucket": row["bucket"],
-            "action": row["action"],
-            "raw_side": row["raw_side"],
-            "final_side": row["final_side"],
             "total": total,
             "skipped_count": row["skipped_count"] or 0,
             "fired_count": row["fired_count"] or 0,
@@ -1165,7 +1187,20 @@ async def get_threshold_bucket_stats(channel: str, limit: int | None = None) -> 
             "win_pct": win_pct,
             "avg_prob": float(row["avg_prob"] or 0.0),
             "last_seen": row["last_seen"],
-        })
+        }
+        if breakdown:
+            item.update({
+                "action": row["action"],
+                "raw_side": row["raw_side"],
+                "final_side": row["final_side"],
+            })
+        else:
+            item.update({
+                "action_count": row["action_count"] or 0,
+                "raw_side_count": row["raw_side_count"] or 0,
+                "final_side_count": row["final_side_count"] or 0,
+            })
+        result.append(item)
     return result
 
 

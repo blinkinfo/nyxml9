@@ -26,7 +26,7 @@ def test_threshold_action_keyboard_contains_all_actions():
 
 def test_threshold_formatters_render_expected_details():
     overview = format_threshold_controls_overview('real', [{'bucket': '0.58', 'action': 'invert'}], [
-        {'bucket': '0.58', 'action': 'INVERT', 'raw_side': 'Up', 'final_side': 'Down', 'total': 3, 'fired_count': 3, 'wins': 2, 'losses': 1, 'win_pct': 66.7}
+        {'bucket': '0.58', 'total': 3, 'skipped_count': 0, 'fired_count': 3, 'wins': 2, 'losses': 1, 'win_pct': 66.7, 'action_count': 1, 'raw_side_count': 1, 'final_side_count': 1}
     ])
     assert '0.58' in overview
     assert 'INVERT' in overview

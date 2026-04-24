@@ -48,6 +48,16 @@ def test_threshold_controls_persist_and_aggregate():
             bucket_stats = asyncio.run(queries.get_threshold_bucket_stats('real'))
             assert len(bucket_stats) == 1
             assert bucket_stats[0]['bucket'] == '0.58'
+            assert bucket_stats[0]['total'] == 1
+            assert bucket_stats[0]['fired_count'] == 1
+            assert bucket_stats[0]['skipped_count'] == 0
+            assert bucket_stats[0]['action_count'] == 1
             assert bucket_stats[0]['win_pct'] == 100.0
+
+            breakdown = asyncio.run(queries.get_threshold_bucket_stats('real', breakdown=True))
+            assert len(breakdown) == 1
+            assert breakdown[0]['action'] == 'INVERT'
+            assert breakdown[0]['raw_side'] == 'Up'
+            assert breakdown[0]['final_side'] == 'Down'
         finally:
             cfg.DB_PATH = original

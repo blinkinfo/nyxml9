@@ -1169,9 +1169,13 @@ def format_threshold_controls_overview(channel: str, controls: list[dict[str, An
     if stats:
         lines.append("Recent bucket stats:")
         for row in stats[:6]:
-            side_pair = row['raw_side'] if row['raw_side'] == row['final_side'] or not row['final_side'] else f"{row['raw_side']}->{row['final_side']}"
+            slices_note = ""
+            if (row.get('action_count', 0) > 1) or (row.get('raw_side_count', 0) > 1) or (row.get('final_side_count', 0) > 1):
+                slices_note = (
+                    f"  [slices: actions={row.get('action_count', 0)} raw={row.get('raw_side_count', 0)} final={row.get('final_side_count', 0)}]"
+                )
             lines.append(
-                f"- {row['bucket']} {str(row['action']).upper()} {side_pair}: total={row['total']} fired={row['fired_count']} wins={row['wins']} losses={row['losses']} wr={row['win_pct']}%"
+                f"- {row['bucket']}: total={row['total']} fired={row['fired_count']} skipped={row['skipped_count']} wins={row['wins']} losses={row['losses']} wr={row['win_pct']}%{slices_note}"
             )
     else:
         lines.append("No threshold bucket history yet.")

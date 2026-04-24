@@ -122,6 +122,9 @@ DEFAULT_SETTINGS = {
     "ml_volatility_gate_enabled": "true",
 }
 
+_DEFAULT_ML_THRESHOLD = cfg.ML_DEFAULT_THRESHOLD
+_DEFAULT_ML_DOWN_THRESHOLD = round(1.0 - _DEFAULT_ML_THRESHOLD, 4)
+
 
 async def init_db(db_path: str | None = None) -> None:
     """Create tables if they don't exist and seed default settings."""
@@ -135,10 +138,12 @@ async def init_db(db_path: str | None = None) -> None:
             )
         # Seed default ML thresholds (INSERT OR IGNORE — never overwrite live values)
         await db.execute(
-            "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_threshold', '0.53')"
+            "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_threshold', ?)",
+            (str(_DEFAULT_ML_THRESHOLD),),
         )
         await db.execute(
-            "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_down_threshold', '0.47')"
+            "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_down_threshold', ?)",
+            (str(_DEFAULT_ML_DOWN_THRESHOLD),),
         )
         default_ranges = ",".join(
             f"{lo:.2f}-{hi:.2f}" for lo, hi in getattr(cfg, "BLOCKED_THRESHOLD_RANGES", [(0.20, 0.22)])
@@ -309,18 +314,19 @@ async def migrate_db(db_path: str | None = None) -> None:
         except Exception as e:
             log.warning("migrate_db: model_blobs table creation failed: %s", e)
 
-        # --- seed default ML threshold ---
+        # --- seed default ML thresholds from config ---
         try:
             await db.execute(
-                "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_threshold', '0.56')"
+                "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_threshold', ?)",
+                (str(_DEFAULT_ML_THRESHOLD),),
             )
         except Exception as e:
             log.warning("migrate_db: ml_threshold seed failed: %s", e)
 
-        # --- seed default ML DOWN threshold (1 - up_threshold = 1 - 0.56 = 0.44) ---
         try:
             await db.execute(
-                "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_down_threshold', '0.44')"
+                "INSERT OR IGNORE INTO ml_config (key, value) VALUES ('ml_down_threshold', ?)",
+                (str(_DEFAULT_ML_DOWN_THRESHOLD),),
             )
         except Exception as e:
             log.warning("migrate_db: ml_down_threshold seed failed: %s", e)

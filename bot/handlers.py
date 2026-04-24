@@ -304,7 +304,7 @@ async def cmd_thresholds(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def _render_threshold_bucket(update: Update, channel: str, bucket: str) -> None:
     control = await queries.get_threshold_control(channel, bucket)
-    all_stats = await queries.get_threshold_bucket_stats(channel)
+    all_stats = await queries.get_threshold_bucket_stats(channel, breakdown=True)
     stats = [row for row in all_stats if row["bucket"] == bucket]
     text = format_threshold_bucket_detail(channel, bucket, (control or {}).get("action"), stats)
     kb = threshold_bucket_action_keyboard(channel, bucket)
