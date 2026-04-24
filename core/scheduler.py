@@ -419,19 +419,99 @@ async def _check_and_trade() -> None:
             await _send_telegram(msg)
             return
 
-        side = signal["side"]
-        entry_price = signal["entry_price"]
-        opposite_price = signal["opposite_price"]
-        token_id = signal["token_id"]
+        raw_side = signal["side"]
+        raw_entry_price = signal["entry_price"]
+        raw_opposite_price = signal["opposite_price"]
+        raw_token_id = signal["token_id"]
+        raw_opposite_token_id = signal.get("opposite_token_id", raw_token_id)
         pattern = signal.get("pattern")
-
-        # Invert trades: swap side, prices, and token_id to bet opposite the signal.
-        invert_trades = await queries.is_invert_trades_enabled()
-        if invert_trades:
-            side = "Down" if side == "Up" else "Up"
-            entry_price, opposite_price = opposite_price, entry_price
-            token_id = signal.get("opposite_token_id", token_id)
         slug = signal.get("slot_n1_slug", f"btc-updown-5m-{slot_ts}")
+
+        demo_trade_enabled = await queries.is_demo_trade_enabled()
+        threshold_channel = "demo" if demo_trade_enabled else "real"
+        threshold_bucket_prob = signal.get("ml_p_up") if raw_side == "Up" else signal.get("ml_p_down")
+        threshold_bucket = None
+        threshold_action = None
+        threshold_source = None
+        policy_note = None
+
+        side = raw_side
+        entry_price = raw_entry_price
+        opposite_price = raw_opposite_price
+        token_id = raw_token_id
+
+        if threshold_bucket_prob is not None and signal.get("ml_p_up") is not None and signal.get("ml_p_down") is not None:
+            invert_trades = await queries.is_invert_trades_enabled()
+            default_action = "invert" if invert_trades else "follow"
+            control = await queries.get_threshold_control(threshold_channel, str(threshold_bucket_prob))
+            decision = resolve_threshold_policy(
+                channel=threshold_channel,
+                raw_side=raw_side,
+                p_up=float(signal["ml_p_up"]),
+                p_down=float(signal["ml_p_down"]),
+                bucket_action=(control or {}).get("action"),
+                default_action=default_action,
+                default_source="global_invert_default" if invert_trades else "default_follow",
+            )
+            threshold_bucket = decision.bucket
+            threshold_action = decision.display_action
+            threshold_source = decision.source
+            policy_note = f"raw={decision.raw_side} final={decision.final_side or 'BLOCKED'} bucket={decision.bucket} action={decision.display_action}"
+            if decision.blocked:
+                signal_id = await queries.insert_signal(
+                    slot_start=slot_start_full,
+                    slot_end=slot_end_full,
+                    slot_timestamp=slot_ts,
+                    side=None,
+                    entry_price=None,
+                    opposite_price=None,
+                    skipped=True,
+                    pattern=pattern,
+                    raw_side=raw_side,
+                    final_side=None,
+                    threshold_bucket=threshold_bucket,
+                    threshold_action=threshold_action,
+                    threshold_channel=threshold_channel,
+                    threshold_source=threshold_source,
+                    threshold_bucket_prob=decision.bucket_probability,
+                    policy_note=policy_note,
+                )
+                blocked_msg = (
+                    f"Threshold control blocked {raw_side} for {slot_start_str}-{slot_end_str} UTC. "
+                    f"Channel={threshold_channel} bucket={decision.bucket} action={decision.display_action}."
+                )
+                if "ml_p_up" in signal:
+                    msg = format_ml_skip(
+                        slot_start_str=slot_start_str,
+                        slot_end_str=slot_end_str,
+                        ml_p_up=signal["ml_p_up"],
+                        ml_p_down=signal["ml_p_down"],
+                        ml_up_threshold=signal["ml_up_threshold"],
+                        ml_down_threshold=signal["ml_down_threshold"],
+                        ml_down_enabled=signal["ml_down_enabled"],
+                        policy_note=policy_note,
+                        reason_override=blocked_msg,
+                    )
+                else:
+                    msg = format_skip(
+                        slot_start_str=slot_start_str,
+                        slot_end_str=slot_end_str,
+                        reason=blocked_msg,
+                        pattern=pattern,
+                    )
+                await _send_telegram(msg)
+                return
+            side = decision.final_side or raw_side
+            if side != raw_side:
+                entry_price, opposite_price = raw_opposite_price, raw_entry_price
+                token_id = raw_opposite_token_id
+        else:
+            invert_trades = await queries.is_invert_trades_enabled()
+            if invert_trades:
+                side = "Down" if side == "Up" else "Up"
+                entry_price, opposite_price = opposite_price, entry_price
+                token_id = raw_opposite_token_id
+            threshold_source = "legacy_non_ml"
 
         signal_id = await queries.insert_signal(
             slot_start=slot_start_full,
@@ -442,10 +522,17 @@ async def _check_and_trade() -> None:
             opposite_price=opposite_price,
             skipped=False,
             pattern=pattern,
+            raw_side=raw_side,
+            final_side=side,
+            threshold_bucket=threshold_bucket,
+            threshold_action=threshold_action,
+            threshold_channel=threshold_channel if threshold_bucket is not None else None,
+            threshold_source=threshold_source,
+            threshold_bucket_prob=threshold_bucket_prob,
+            policy_note=policy_note,
         )
 
         # 3. TradeManager passthrough (filters removed — always allowed)
-        demo_trade_enabled = await queries.is_demo_trade_enabled()
         _filter_result = await TradeManager.check(
             signal_side=side,
             current_slot_ts=slot_ts,
@@ -472,6 +559,11 @@ async def _check_and_trade() -> None:
                 ml_up_threshold=signal["ml_up_threshold"],
                 ml_down_threshold=signal["ml_down_threshold"],
                 ml_down_enabled=signal.get("ml_down_enabled", False),
+                raw_side=raw_side,
+                threshold_bucket=threshold_bucket,
+                threshold_action=threshold_action,
+                threshold_channel=threshold_channel if threshold_bucket is not None else None,
+                threshold_source=threshold_source,
             )
         else:
             msg = format_signal(

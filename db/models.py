@@ -18,7 +18,15 @@ CREATE TABLE IF NOT EXISTS signals (
     resolved_at TIMESTAMP,
     skipped INTEGER DEFAULT 0,
     filter_blocked INTEGER DEFAULT 0,
-    pattern TEXT
+    pattern TEXT,
+    raw_side TEXT,
+    final_side TEXT,
+    threshold_bucket TEXT,
+    threshold_action TEXT,
+    threshold_channel TEXT,
+    threshold_source TEXT,
+    threshold_bucket_prob REAL,
+    policy_note TEXT
 );
 
 CREATE TABLE IF NOT EXISTS trades (
@@ -68,6 +76,16 @@ CREATE TABLE IF NOT EXISTS redemptions (
 CREATE TABLE IF NOT EXISTS ml_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS threshold_controls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    bucket TEXT NOT NULL,
+    action TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(channel, bucket)
 );
 
 CREATE TABLE IF NOT EXISTS model_registry (
@@ -198,6 +216,22 @@ async def migrate_db(db_path: str | None = None) -> None:
                 await db.execute("ALTER TABLE signals ADD COLUMN filter_blocked INTEGER DEFAULT 0")
             if "pattern" not in sig_columns:
                 await db.execute("ALTER TABLE signals ADD COLUMN pattern TEXT")
+            if "raw_side" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN raw_side TEXT")
+            if "final_side" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN final_side TEXT")
+            if "threshold_bucket" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN threshold_bucket TEXT")
+            if "threshold_action" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN threshold_action TEXT")
+            if "threshold_channel" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN threshold_channel TEXT")
+            if "threshold_source" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN threshold_source TEXT")
+            if "threshold_bucket_prob" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN threshold_bucket_prob REAL")
+            if "policy_note" not in sig_columns:
+                await db.execute("ALTER TABLE signals ADD COLUMN policy_note TEXT")
         except Exception as e:
             log.warning("migrate_db: signals column migration failed: %s", e)
 
@@ -223,6 +257,24 @@ async def migrate_db(db_path: str | None = None) -> None:
             )
         except Exception as e:
             log.warning("migrate_db: ml_config table creation failed: %s", e)
+
+        # --- threshold_controls table ---
+        try:
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS threshold_controls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel TEXT NOT NULL,
+                    bucket TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(channel, bucket)
+                )
+                """
+            )
+        except Exception as e:
+            log.warning("migrate_db: threshold_controls table creation failed: %s", e)
 
         # --- model_registry table ---
         try:

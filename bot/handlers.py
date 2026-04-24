@@ -39,6 +39,8 @@ from bot.formatters import (
     format_set_threshold,
     format_set_down_threshold,
     format_signal_stats,
+    format_threshold_controls_overview,
+    format_threshold_bucket_detail,
     format_status,
     format_trade_stats,
 )
@@ -54,6 +56,9 @@ from bot.keyboards import (
     retrain_blocked_keyboard,
     settings_keyboard,
     signal_filter_row,
+    threshold_channel_keyboard,
+    threshold_bucket_keyboard,
+    threshold_bucket_action_keyboard,
     trade_filter_row,
 )
 from bot.middleware import auth_check
@@ -280,6 +285,49 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
 
+async def _render_threshold_controls(update: Update, channel: str) -> None:
+    controls = await queries.list_threshold_controls(channel)
+    stats = await queries.get_threshold_bucket_stats(channel)
+    text = format_threshold_controls_overview(channel, controls, stats)
+    kb = threshold_channel_keyboard(channel)
+    if update.callback_query:
+        await update.callback_query.answer()
+        await _safe_edit(update.callback_query, text, reply_markup=kb)
+    else:
+        await update.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
+
+
+@auth_check
+async def cmd_thresholds(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _render_threshold_controls(update, "real")
+
+
+async def _render_threshold_bucket(update: Update, channel: str, bucket: str) -> None:
+    control = await queries.get_threshold_control(channel, bucket)
+    all_stats = await queries.get_threshold_bucket_stats(channel)
+    stats = [row for row in all_stats if row["bucket"] == bucket]
+    text = format_threshold_bucket_detail(channel, bucket, (control or {}).get("action"), stats)
+    kb = threshold_bucket_action_keyboard(channel, bucket)
+    await update.callback_query.answer()
+    await _safe_edit(update.callback_query, text, reply_markup=kb)
+
+
+def _all_threshold_buckets() -> list[str]:
+    return [f"{i/100:.2f}" for i in range(50, 100)]
+
+
+async def _render_threshold_bucket_browser(update: Update, channel: str, offset: int) -> None:
+    buckets = _all_threshold_buckets()
+    text = (
+        f"<b>Select bucket ({channel.upper()})</b>\n"
+        f"Browse the 2-decimal truncated probability buckets.\n"
+        f"Tap a bucket to inspect stats and change FOLLOW/INVERT/BLOCK."
+    )
+    kb = threshold_bucket_keyboard(channel, buckets, offset=offset)
+    await update.callback_query.answer()
+    await _safe_edit(update.callback_query, text, reply_markup=kb)
+
+
 # ---------------------------------------------------------------------------
 # /help
 # ---------------------------------------------------------------------------
@@ -480,6 +528,32 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     elif data == "cmd_help":
         await cmd_help(update, context)
+
+    elif data == "thresholds_home_real":
+        await _render_threshold_controls(update, "real")
+
+    elif data == "thresholds_home_demo":
+        await _render_threshold_controls(update, "demo")
+
+    elif data.startswith("thresholds_browse_"):
+        _, _, channel, offset = data.split("_", 3)
+        await _render_threshold_bucket_browser(update, channel, int(offset))
+
+    elif data.startswith("threshold_bucket_"):
+        _, _, channel, bucket = data.split("_", 3)
+        await _render_threshold_bucket(update, channel, bucket)
+
+    elif data.startswith("threshold_set_"):
+        _, _, channel, bucket, action = data.split("_", 4)
+        await queries.set_threshold_control(channel, bucket, action)
+        await query.answer(f"{channel.upper()} {bucket} -> {action.upper()}")
+        await _render_threshold_bucket(update, channel, bucket)
+
+    elif data.startswith("threshold_clear_"):
+        _, _, channel, bucket = data.split("_", 3)
+        deleted = await queries.delete_threshold_control(channel, bucket)
+        await query.answer("Override cleared" if deleted else "No override to clear")
+        await _render_threshold_bucket(update, channel, bucket)
 
     elif data == "cmd_redeem":
         await cmd_redeem(update, context)
@@ -1058,6 +1132,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("signals",     cmd_signals))
     application.add_handler(CommandHandler("trades",      cmd_trades))
     application.add_handler(CommandHandler("settings",    cmd_settings))
+    application.add_handler(CommandHandler("thresholds",  cmd_thresholds))
     application.add_handler(CommandHandler("help",        cmd_help))
     application.add_handler(CommandHandler("redeem",      cmd_redeem))
     application.add_handler(CommandHandler("redemptions", cmd_redemptions))

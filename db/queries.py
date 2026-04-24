@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from core.threshold_policy import truncate_probability_bucket
+
 import aiosqlite
 import config as cfg
 
@@ -189,12 +191,21 @@ async def insert_signal(
                                    # column is always written as False (0) and
                                    # is never set to True by any active code path.
     pattern: str | None = None,
+    raw_side: str | None = None,
+    final_side: str | None = None,
+    threshold_bucket: str | None = None,
+    threshold_action: str | None = None,
+    threshold_channel: str | None = None,
+    threshold_source: str | None = None,
+    threshold_bucket_prob: float | None = None,
+    policy_note: str | None = None,
 ) -> int:
     async with aiosqlite.connect(_db()) as db:
         cursor = await db.execute(
             "INSERT INTO signals (slot_start, slot_end, slot_timestamp, side, "
-            "entry_price, opposite_price, skipped, filter_blocked, pattern) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "entry_price, opposite_price, skipped, filter_blocked, pattern, raw_side, final_side, "
+            "threshold_bucket, threshold_action, threshold_channel, threshold_source, threshold_bucket_prob, policy_note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 slot_start,
                 slot_end,
@@ -205,6 +216,14 @@ async def insert_signal(
                 1 if skipped else 0,
                 1 if filter_blocked else 0,
                 pattern,
+                raw_side,
+                final_side,
+                threshold_bucket,
+                threshold_action,
+                threshold_channel,
+                threshold_source,
+                threshold_bucket_prob,
+                policy_note,
             ),
         )
         await db.commit()
@@ -610,6 +629,11 @@ async def get_signal_stats(limit: int | None = None) -> dict[str, Any]:
         )).fetchone()
         skip_count = skip_row["cnt"] if skip_row else 0
 
+        blocked_row = await (await db.execute(
+            "SELECT COUNT(*) as cnt FROM signals WHERE skipped = 1 AND threshold_action = 'BLOCK'"
+        )).fetchone()
+        policy_blocked_count = blocked_row["cnt"] if blocked_row else 0
+
         # Resolved signals for win/loss stats (exclude skipped).
         if limit:
             inner = (
@@ -641,6 +665,7 @@ async def get_signal_stats(limit: int | None = None) -> dict[str, Any]:
         "losses":        losses,
         "resolved":      resolved,
         "win_pct":       round(win_pct, 1),
+        "policy_blocked_count": policy_blocked_count,
         **streaks,
     }
 
@@ -1012,6 +1037,136 @@ async def set_blocked_threshold_ranges(ranges: list[tuple[float, float]]) -> Non
     """
     formatted = "__NONE__" if not ranges else _format_ranges(ranges)
     await set_ml_config("blocked_threshold_ranges", formatted)
+
+
+# ---------------------------------------------------------------------------
+# Threshold controls
+# ---------------------------------------------------------------------------
+
+_VALID_THRESHOLD_ACTIONS = {"follow", "invert", "block"}
+_VALID_THRESHOLD_CHANNELS = {"demo", "real"}
+
+
+def _normalize_threshold_channel(channel: str) -> str:
+    normalized = (channel or "").strip().lower()
+    if normalized not in _VALID_THRESHOLD_CHANNELS:
+        raise ValueError(f"Invalid threshold control channel: {channel}")
+    return normalized
+
+
+def _normalize_threshold_action(action: str) -> str:
+    normalized = (action or "").strip().lower()
+    if normalized not in _VALID_THRESHOLD_ACTIONS:
+        raise ValueError(f"Invalid threshold control action: {action}")
+    return normalized
+
+
+def _normalize_threshold_bucket(bucket: str) -> str:
+    return truncate_probability_bucket(float(bucket))
+
+
+async def get_threshold_control(channel: str, bucket: str) -> dict[str, Any] | None:
+    channel_n = _normalize_threshold_channel(channel)
+    bucket_n = _normalize_threshold_bucket(bucket)
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM threshold_controls WHERE channel = ? AND bucket = ?",
+            (channel_n, bucket_n),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def set_threshold_control(channel: str, bucket: str, action: str) -> None:
+    channel_n = _normalize_threshold_channel(channel)
+    bucket_n = _normalize_threshold_bucket(bucket)
+    action_n = _normalize_threshold_action(action)
+    async with aiosqlite.connect(_db()) as db:
+        await db.execute(
+            """
+            INSERT INTO threshold_controls (channel, bucket, action, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(channel, bucket) DO UPDATE SET
+                action = excluded.action,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (channel_n, bucket_n, action_n),
+        )
+        await db.commit()
+
+
+async def delete_threshold_control(channel: str, bucket: str) -> bool:
+    channel_n = _normalize_threshold_channel(channel)
+    bucket_n = _normalize_threshold_bucket(bucket)
+    async with aiosqlite.connect(_db()) as db:
+        cursor = await db.execute(
+            "DELETE FROM threshold_controls WHERE channel = ? AND bucket = ?",
+            (channel_n, bucket_n),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def list_threshold_controls(channel: str) -> list[dict[str, Any]]:
+    channel_n = _normalize_threshold_channel(channel)
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT channel, bucket, action, created_at, updated_at FROM threshold_controls WHERE channel = ? ORDER BY bucket ASC",
+            (channel_n,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def get_threshold_bucket_stats(channel: str, limit: int | None = None) -> list[dict[str, Any]]:
+    channel_n = _normalize_threshold_channel(channel)
+    limit_clause = ""
+    params: list[Any] = [channel_n]
+    if limit is not None:
+        limit_clause = " LIMIT ?"
+        params.append(limit)
+    query = (
+        "SELECT threshold_bucket AS bucket, threshold_action AS action, raw_side, final_side, "
+        "COUNT(*) AS total, "
+        "SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skipped_count, "
+        "SUM(CASE WHEN skipped = 0 THEN 1 ELSE 0 END) AS fired_count, "
+        "SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) AS wins, "
+        "SUM(CASE WHEN is_win = 0 THEN 1 ELSE 0 END) AS losses, "
+        "AVG(threshold_bucket_prob) AS avg_prob, "
+        "MAX(slot_start) AS last_seen "
+        "FROM signals WHERE threshold_channel = ? AND threshold_bucket IS NOT NULL "
+        "GROUP BY threshold_bucket, threshold_action, raw_side, final_side "
+        "ORDER BY threshold_bucket ASC, threshold_action ASC, raw_side ASC" + limit_clause
+    )
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(query, tuple(params))
+        rows = await cursor.fetchall()
+    result = []
+    for row in rows:
+        total = row["total"] or 0
+        wins = row["wins"] or 0
+        losses = row["losses"] or 0
+        resolved = wins + losses
+        win_pct = round((wins / resolved) * 100, 1) if resolved else 0.0
+        result.append({
+            "bucket": row["bucket"],
+            "action": row["action"],
+            "raw_side": row["raw_side"],
+            "final_side": row["final_side"],
+            "total": total,
+            "skipped_count": row["skipped_count"] or 0,
+            "fired_count": row["fired_count"] or 0,
+            "wins": wins,
+            "losses": losses,
+            "resolved": resolved,
+            "win_pct": win_pct,
+            "avg_prob": float(row["avg_prob"] or 0.0),
+            "last_seen": row["last_seen"],
+        })
+    return result
 
 
 # ---------------------------------------------------------------------------

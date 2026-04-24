@@ -201,6 +201,11 @@ def format_ml_signal(
     ml_up_threshold: float,
     ml_down_threshold: float,
     ml_down_enabled: bool = False,
+    raw_side: str | None = None,
+    threshold_bucket: str | None = None,
+    threshold_action: str | None = None,
+    threshold_channel: str | None = None,
+    threshold_source: str | None = None,
 ) -> str:
     """ML signal notification — Option A card with confidence and edge."""
     side_emoji = "\U0001f4c8" if side == "Up" else "\U0001f4c9"
@@ -233,6 +238,16 @@ def format_ml_signal(
     else:
         thr_line = f"\u2502  Threshold: \u2265 {win_thr*100:.1f}%\n"
 
+    policy_lines = ""
+    if threshold_bucket:
+        effective_raw = raw_side or side
+        policy_lines = (
+            f"\u2502  Policy: {effective_raw} -> {side}  ({threshold_action or 'FOLLOW'})\n"
+            f"\u2502  Bucket: {threshold_bucket}  |  Channel: {(threshold_channel or 'n/a').upper()}\n"
+        )
+        if threshold_source:
+            policy_lines += f"\u2502  Source: {threshold_source}\n"
+
     return (
         "\U0001f4e1 <b>Signal Fired!</b>  \U0001f916 ML\n"
         "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
@@ -244,6 +259,7 @@ def format_ml_signal(
         f"\u2502  {win_arrow} {win_label}   {win_prob*100:.1f}%  \u2705  edge {edge_str}\n"
         f"\u2502  {los_arrow} {los_label}   {los_prob*100:.1f}%\n"
         f"{thr_line}"
+        f"{policy_lines}"
         "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
     )
 
@@ -256,6 +272,8 @@ def format_ml_skip(
     ml_up_threshold: float,
     ml_down_threshold: float,
     ml_down_enabled: bool,
+    policy_note: str | None = None,
+    reason_override: str | None = None,
 ) -> str:
     """ML no-signal notification — Option C card with shortfall or disabled status."""
     # Shortfall is threshold - prob; positive means below threshold (normal skip),
@@ -271,6 +289,12 @@ def format_ml_skip(
     else:
         down_note = "disabled"
 
+    extra = ""
+    if reason_override:
+        extra += f"\u2502  {_e(reason_override)}\n"
+    if policy_note:
+        extra += f"\u2502  {_e(policy_note)}\n"
+
     return (
         "\u23ed\ufe0f <b>No Signal</b>  \U0001f916 ML\n"
         "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
@@ -280,6 +304,7 @@ def format_ml_skip(
         f"\u2502  \u2715 UP    {ml_p_up*100:.1f}%   {up_note}\n"
         f"\u2502  \u2715 DOWN  {ml_p_down*100:.1f}%   {down_note}\n"
         f"\u2502  UP thr \u2265 {ml_up_threshold*100:.1f}%  \u2502  DOWN thr \u2265 {ml_down_threshold*100:.1f}%\n"
+        f"{extra}"
         "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
     )
 
@@ -613,6 +638,7 @@ def format_signal_stats(stats: dict[str, Any], label: str = "All Time") -> str:
         f"\U0001f480 Worst Loss Streak: {stats['worst_loss_streak']}",
         SEP,
         f"\u23ed\ufe0f Skipped (No Signal): {stats['skip_count']}",
+        f"\U0001f6ab Policy Blocked: {stats.get('policy_blocked_count', 0)}",
     ]
     return "\n".join(lines)
 
@@ -705,7 +731,14 @@ def format_recent_signals(signals: list[dict[str, Any]]) -> str:
             lines.append(f"\u23ed\ufe0f {ss}-{se} UTC \u2014 skipped")
         else:
             icon = "\u2705" if s.get("is_win") == 1 else ("\u274c" if s.get("is_win") == 0 else "\u23f3")
-            lines.append(f"{icon} {ss}-{se} UTC  {s['side']}  ${s.get('entry_price', 0):.2f}")
+            raw_side = s.get('raw_side')
+            final_side = s.get('final_side') or s.get('side')
+            action = s.get('threshold_action')
+            bucket = s.get('threshold_bucket')
+            policy = ''
+            if bucket and action:
+                policy = f'  [{action} {bucket}' + (f' {raw_side}->{final_side}' if raw_side and final_side and raw_side != final_side else '') + ']'
+            lines.append(f"{icon} {ss}-{se} UTC  {final_side or s['side']}  ${s.get('entry_price', 0):.2f}{policy}")
     return "\n".join(lines)
 
 
@@ -734,7 +767,7 @@ def format_help() -> str:
         "<b>Actions</b>\n"
         "/redeem  &middot; /redemptions\n\n"
         "<b>Config</b>\n"
-        "/settings  &middot; /demo\n\n"
+        "/settings  &middot; /demo  &middot; /thresholds\n\n"
         "<b>Misc</b>\n"
         "/help  &middot; /start\n\n"
         "<b>ML Thresholds</b>\n"
@@ -1116,4 +1149,45 @@ def format_drift_alert(drifted_features: list, records_analyzed: int) -> str:
         "\u2501" * 20,
         "\U0001f916 Model may need retraining. Use /retrain to update.",
     ]
+    return "\n".join(lines)
+
+
+def format_threshold_controls_overview(channel: str, controls: list[dict[str, Any]], stats: list[dict[str, Any]]) -> str:
+    title = f"Threshold Controls ({channel.upper()})"
+    lines = [f"\U0001f3af <b>{title}</b>", SEP]
+    if controls:
+        lines.append(f"Configured buckets: {len(controls)}")
+        preview = controls[:8]
+        for row in preview:
+            lines.append(f"- {row['bucket']}: {str(row['action']).upper()}")
+        if len(controls) > len(preview):
+            lines.append(f"- ... and {len(controls) - len(preview)} more")
+    else:
+        lines.append("No per-bucket overrides. Default behavior applies.")
+
+    lines.append(SEP)
+    if stats:
+        lines.append("Recent bucket stats:")
+        for row in stats[:6]:
+            side_pair = row['raw_side'] if row['raw_side'] == row['final_side'] or not row['final_side'] else f"{row['raw_side']}->{row['final_side']}"
+            lines.append(
+                f"- {row['bucket']} {str(row['action']).upper()} {side_pair}: total={row['total']} fired={row['fired_count']} wins={row['wins']} losses={row['losses']} wr={row['win_pct']}%"
+            )
+    else:
+        lines.append("No threshold bucket history yet.")
+
+    return "\n".join(lines)
+
+
+def format_threshold_bucket_detail(channel: str, bucket: str, action: str | None, stats: list[dict[str, Any]]) -> str:
+    lines = [f"\U0001f50d <b>Bucket {bucket} ({channel.upper()})</b>", SEP]
+    lines.append(f"Configured action: {(action or 'default').upper()}")
+    if not stats:
+        lines.append("No signals have hit this bucket yet.")
+        return "\n".join(lines)
+    for row in stats[:8]:
+        final_side = row['final_side'] or 'BLOCKED'
+        lines.append(
+            f"- {row['raw_side']} -> {final_side} via {str(row['action']).upper()}: total={row['total']} skipped={row['skipped_count']} wins={row['wins']} losses={row['losses']} wr={row['win_pct']}% avg_p={row['avg_prob']:.4f}"
+        )
     return "\n".join(lines)

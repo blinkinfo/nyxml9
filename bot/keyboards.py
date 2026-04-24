@@ -285,3 +285,40 @@ def ml_volatility_gate_confirm_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Keep Gate Enabled", callback_data="cancel_disable_ml_volatility_gate")],
         [InlineKeyboardButton("Back to Settings", callback_data="cmd_settings")],
     ])
+
+
+def threshold_channel_keyboard(active: str = "real") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            _filter_btn("Real", "thresholds_home_real", active),
+            _filter_btn("Demo", "thresholds_home_demo", active),
+        ],
+        [InlineKeyboardButton("Browse Buckets", callback_data=f"thresholds_browse_{active}_0")],
+        [InlineKeyboardButton("Back to Settings", callback_data="cmd_settings")],
+    ])
+
+
+def threshold_bucket_keyboard(channel: str, buckets: list[str], offset: int = 0, page_size: int = 8) -> InlineKeyboardMarkup:
+    page = buckets[offset:offset + page_size]
+    rows = [[InlineKeyboardButton(bucket, callback_data=f"threshold_bucket_{channel}_{bucket}")] for bucket in page]
+    nav = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton("Prev", callback_data=f"thresholds_browse_{channel}_{max(0, offset - page_size)}"))
+    if offset + page_size < len(buckets):
+        nav.append(InlineKeyboardButton("Next", callback_data=f"thresholds_browse_{channel}_{offset + page_size}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("Back", callback_data=f"thresholds_home_{channel}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def threshold_bucket_action_keyboard(channel: str, bucket: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("FOLLOW", callback_data=f"threshold_set_{channel}_{bucket}_follow"),
+            InlineKeyboardButton("INVERT", callback_data=f"threshold_set_{channel}_{bucket}_invert"),
+            InlineKeyboardButton("BLOCK", callback_data=f"threshold_set_{channel}_{bucket}_block"),
+        ],
+        [InlineKeyboardButton("Clear Override", callback_data=f"threshold_clear_{channel}_{bucket}")],
+        [InlineKeyboardButton("Back", callback_data=f"thresholds_browse_{channel}_0")],
+    ])
