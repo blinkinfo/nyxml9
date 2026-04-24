@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from bot.keyboards import threshold_bucket_action_keyboard, threshold_bucket_keyboard
+from bot.keyboards import settings_keyboard, threshold_bucket_action_keyboard, threshold_bucket_keyboard
 from bot.formatters import format_threshold_bucket_detail, format_threshold_controls_overview
 
 
@@ -35,3 +35,17 @@ def test_threshold_formatters_render_expected_details():
     ])
     assert 'Bucket 0.67 (DEMO)' in detail
     assert 'BLOCKED' in detail
+
+
+def test_settings_keyboard_exposes_threshold_controls_entry():
+    kb = settings_keyboard(True, 5.0)
+    actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+    assert 'thresholds_home_real' in actions
+
+
+def test_threshold_channel_keyboard_returns_to_settings():
+    from bot.keyboards import threshold_channel_keyboard
+
+    kb = threshold_channel_keyboard('real')
+    actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+    assert 'cmd_settings' in actions

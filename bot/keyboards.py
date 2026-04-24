@@ -106,6 +106,8 @@ def settings_keyboard(
             f"\U0001f6e1 ML Volatility Gate: {'ON' if ml_volatility_gate_enabled else 'OFF'}",
             callback_data="toggle_ml_volatility_gate",
         )],
+        # Threshold controls
+        [InlineKeyboardButton("\U0001f3af Threshold Controls", callback_data="thresholds_home_real")],
         # Back
         [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
     ])

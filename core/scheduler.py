@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import config as cfg
 from core import strategy, trader, resolver
 from core import pending_queue
+from core.threshold_policy import resolve_threshold_policy
 from db import queries
 from ml import inference_logger
 import html as _html
