@@ -369,6 +369,14 @@ def threshold_bucket_keyboard(channel: str, buckets: list[dict], filter_mode: st
 
 
 def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: str | None = None) -> InlineKeyboardMarkup:
+    back_callback = back_callback or f'thresholds_browse_{channel}_all_bucket_0'
+
+    def _action_cb(action: str) -> str:
+        return f'threshold_set_{channel}_{bucket}_{action}_{back_callback}'
+
+    def _clear_cb() -> str:
+        return f'threshold_clear_{channel}_{bucket}_{back_callback}'
+
     # Determine adjacent buckets for navigation (best effort from bucket string)
     try:
         lo, hi = bucket.split('-')
@@ -380,8 +388,8 @@ def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: s
         prev_bucket = f"{prev_lo:.2f}-{prev_hi:.2f}"
         next_bucket = f"{next_lo:.2f}-{next_hi:.2f}"
         nav_row = [
-            InlineKeyboardButton(f'\u2190 {prev_bucket}', callback_data=f'threshold_bucket_{channel}_{prev_bucket}_{back_callback or "all_bucket_0"}'),
-            InlineKeyboardButton(f'{next_bucket} \u2192', callback_data=f'threshold_bucket_{channel}_{next_bucket}_{back_callback or "all_bucket_0"}'),
+            InlineKeyboardButton(f'\u2190 {prev_bucket}', callback_data=f'threshold_bucket_{channel}_{prev_bucket}_{back_callback}'),
+            InlineKeyboardButton(f'{next_bucket} \u2192', callback_data=f'threshold_bucket_{channel}_{next_bucket}_{back_callback}'),
         ]
         has_nav = True
     except Exception:
@@ -389,15 +397,15 @@ def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: s
 
     kb_rows = [
         [
-            InlineKeyboardButton('\U0001f7e2 Set FOLLOW', callback_data=f'threshold_set_{channel}_{bucket}_follow'),
-            InlineKeyboardButton('\U0001f504 Set INVERT', callback_data=f'threshold_set_{channel}_{bucket}_invert'),
+            InlineKeyboardButton('\U0001f7e2 Set FOLLOW', callback_data=_action_cb('follow')),
+            InlineKeyboardButton('\U0001f504 Set INVERT', callback_data=_action_cb('invert')),
         ],
         [
-            InlineKeyboardButton('\U0001f534 Set BLOCK',  callback_data=f'threshold_set_{channel}_{bucket}_block'),
-            InlineKeyboardButton('Clear Override',        callback_data=f'threshold_clear_{channel}_{bucket}'),
+            InlineKeyboardButton('\U0001f534 Set BLOCK',  callback_data=_action_cb('block')),
+            InlineKeyboardButton('Clear Override',        callback_data=_clear_cb()),
         ],
     ]
     if has_nav:
         kb_rows.append(nav_row)
-    kb_rows.append([InlineKeyboardButton('\u2190 Back to list', callback_data=back_callback or f'thresholds_browse_{channel}_all_bucket_0')])
+    kb_rows.append([InlineKeyboardButton('\u2190 Back to list', callback_data=back_callback)])
     return InlineKeyboardMarkup(kb_rows)

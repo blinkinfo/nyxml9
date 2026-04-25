@@ -31,10 +31,10 @@ def test_threshold_bucket_keyboard_contains_bucket_callbacks():
 def test_threshold_action_keyboard_contains_all_actions_and_back_callback():
     kb = threshold_bucket_action_keyboard('demo', '0.58', back_callback='thresholds_browse_demo_hot_wr_8')
     actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-    assert 'threshold_set_demo_0.58_follow' in actions
-    assert 'threshold_set_demo_0.58_invert' in actions
-    assert 'threshold_set_demo_0.58_block' in actions
-    assert 'threshold_clear_demo_0.58' in actions
+    assert 'threshold_set_demo_0.58_follow_thresholds_browse_demo_hot_wr_8' in actions
+    assert 'threshold_set_demo_0.58_invert_thresholds_browse_demo_hot_wr_8' in actions
+    assert 'threshold_set_demo_0.58_block_thresholds_browse_demo_hot_wr_8' in actions
+    assert 'threshold_clear_demo_0.58_thresholds_browse_demo_hot_wr_8' in actions
     assert 'thresholds_browse_demo_hot_wr_8' in actions
 
 

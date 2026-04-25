@@ -573,27 +573,27 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _render_threshold_bucket(update, channel, bucket, back_callback=back_callback)
 
     elif data.startswith("threshold_set_"):
-        _, _, channel, bucket, action = data.split("_", 4)
+        parts = data.split("_")
+        if len(parts) >= 6:
+            _, _, channel, bucket, action, *back_parts = parts
+            back_callback = "_".join(back_parts) if back_parts else None
+        else:
+            _, _, channel, bucket, action = parts
+            back_callback = None
         await queries.set_threshold_control(channel, bucket, action)
         await query.answer(f"{channel.upper()} {bucket} -> {action.upper()}")
-        back_callback = None
-        if query.message and query.message.reply_markup:
-            try:
-                back_callback = query.message.reply_markup.inline_keyboard[-1][0].callback_data
-            except Exception:
-                back_callback = None
         await _render_threshold_bucket(update, channel, bucket, back_callback=back_callback)
 
     elif data.startswith("threshold_clear_"):
-        _, _, channel, bucket = data.split("_", 3)
+        parts = data.split("_")
+        if len(parts) >= 5:
+            _, _, channel, bucket, *back_parts = parts
+            back_callback = "_".join(back_parts) if back_parts else None
+        else:
+            _, _, channel, bucket = parts
+            back_callback = None
         deleted = await queries.delete_threshold_control(channel, bucket)
         await query.answer("Override cleared" if deleted else "No override to clear")
-        back_callback = None
-        if query.message and query.message.reply_markup:
-            try:
-                back_callback = query.message.reply_markup.inline_keyboard[-1][0].callback_data
-            except Exception:
-                back_callback = None
         await _render_threshold_bucket(update, channel, bucket, back_callback=back_callback)
 
     elif data == "cmd_redeem":
