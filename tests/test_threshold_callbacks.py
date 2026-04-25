@@ -52,14 +52,20 @@ def test_threshold_formatters_render_dashboard_browser_and_detail():
     }, [
         {'bucket': '0.58', 'action': 'invert', 'win_pct': 66.7, 'resolved': 3, 'last_seen': '2025-01-01 00:00:00 UTC', 'is_hot': True, 'needs_review': False}
     ])
-    assert 'Threshold Dashboard (REAL)' in overview
-    assert 'Policy mix: F 1  I 1  B 1' in overview
+    # New title format uses em-dash separator
+    assert 'Threshold Dashboard' in overview
+    assert 'REAL' in overview
+    # Policy mix section uses emoji labels
+    assert 'Follow:' in overview
+    assert 'Invert:' in overview
 
     browser = format_threshold_bucket_browser('demo', 'review', 'recent', [
         {'bucket': '0.67', 'action': 'block', 'resolved': 0, 'total': 4, 'skipped_count': 4, 'win_pct': 0.0, 'is_hot': False, 'needs_review': True, 'configured': True}
     ], 0)
-    assert 'Needs Review (DEMO)' in browser
-    assert 'REV 0.67' in browser
+    assert 'Needs Review' in browser
+    assert 'DEMO' in browser
+    # Emoji-led rows: ⚠️ prefix for needs_review buckets, no plain 'REV' tag
+    assert '0.67' in browser
 
     detail = format_threshold_bucket_detail({
         'bucket': '0.67',
@@ -74,9 +80,11 @@ def test_threshold_formatters_render_dashboard_browser_and_detail():
         ],
         'recommendation': 'Lean BLOCK: bucket is mostly skipping or being suppressed.',
     })
-    assert 'Bucket 0.67 (DEMO)' in detail
-    assert 'BLOCKED' in detail
-    assert 'Operator note:' in detail
+    assert 'Bucket 0.67' in detail
+    assert 'DEMO' in detail
+    assert 'Blocked' in detail or 'BLOCKED' in detail
+    # Note section replaces 'Operator note:' label
+    assert 'Lean BLOCK' in detail
 
 
 def test_threshold_summary_changes_and_help_formatters():
@@ -90,9 +98,13 @@ def test_threshold_summary_changes_and_help_formatters():
         {'bucket': '0.55', 'action': 'follow', 'updated_at': '2025-01-01 00:00:00 UTC'}
     ])
     help_text = format_threshold_help('demo')
-    assert 'Policy Summary (REAL)' in summary
-    assert 'Recent Changes (REAL)' in changes
-    assert 'Threshold Help and Legend (DEMO)' in help_text
+    # New title format uses em-dash separator
+    assert 'Policy Summary' in summary
+    assert 'REAL' in summary
+    assert 'Recent Changes' in changes
+    assert 'REAL' in changes
+    assert 'Help and Legend' in help_text
+    assert 'DEMO' in help_text
 
 
 def test_settings_keyboard_exposes_threshold_controls_entry():

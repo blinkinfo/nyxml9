@@ -292,23 +292,23 @@ def ml_volatility_gate_confirm_keyboard() -> InlineKeyboardMarkup:
 def threshold_channel_keyboard(active: str = "real") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            _filter_btn("Real", "thresholds_home_real", active),
-            _filter_btn("Demo", "thresholds_home_demo", active),
+            _filter_btn("\u2705 REAL" if active == "real" else "REAL", "thresholds_home_real", active),
+            _filter_btn("\u2705 DEMO" if active == "demo" else "DEMO", "thresholds_home_demo", active),
         ],
         [
-            InlineKeyboardButton("Browse All", callback_data=f"thresholds_browse_{active}_all_bucket_0"),
-            InlineKeyboardButton("Overrides", callback_data=f"thresholds_browse_{active}_configured_bucket_0"),
+            InlineKeyboardButton("\U0001f5c2\ufe0f All Buckets", callback_data=f"thresholds_browse_{active}_all_bucket_0"),
+            InlineKeyboardButton("Overrides Only", callback_data=f"thresholds_browse_{active}_configured_bucket_0"),
         ],
         [
-            InlineKeyboardButton("Hot Buckets", callback_data=f"thresholds_browse_{active}_hot_wr_0"),
-            InlineKeyboardButton("Needs Review", callback_data=f"thresholds_browse_{active}_review_recent_0"),
+            InlineKeyboardButton("\U0001f525 Hot Buckets", callback_data=f"thresholds_browse_{active}_hot_wr_0"),
+            InlineKeyboardButton("\u26a0\ufe0f Needs Review", callback_data=f"thresholds_browse_{active}_review_recent_0"),
         ],
         [
-            InlineKeyboardButton("Policy Summary", callback_data=f"thresholds_policy_{active}"),
-            InlineKeyboardButton("Recent Changes", callback_data=f"thresholds_changes_{active}"),
+            InlineKeyboardButton("\U0001f4cb Policy Summary", callback_data=f"thresholds_policy_{active}"),
+            InlineKeyboardButton("\U0001f501 Changes", callback_data=f"thresholds_changes_{active}"),
         ],
-        [InlineKeyboardButton("Help and Legend", callback_data=f"thresholds_help_{active}")],
-        [InlineKeyboardButton("Back to Settings", callback_data="cmd_settings")],
+        [InlineKeyboardButton("\U0001f4a1 Help", callback_data=f"thresholds_help_{active}")],
+        [InlineKeyboardButton("\u2190 Settings", callback_data="cmd_settings")],
     ])
 
 
@@ -316,47 +316,88 @@ def threshold_bucket_keyboard(channel: str, buckets: list[dict], filter_mode: st
     page = buckets[offset:offset + page_size]
     rows = []
     for row in page:
-        icon = 'HOT' if row.get('is_hot') else ('REV' if row.get('needs_review') else ('CFG' if row.get('configured') else 'OBS'))
-        win = f"{row.get('win_pct', 0.0):.0f}%" if row.get('resolved', 0) else '--'
+        # Emoji status icon
+        if row.get('is_hot'):
+            icon = '\U0001f525'  # 🔥
+        elif row.get('needs_review'):
+            icon = '\u26a0\ufe0f'  # ⚠️
+        else:
+            action = str(row.get('action') or '').lower()
+            if action == 'follow':
+                icon = '\U0001f7e2'  # 🟢
+            elif action == 'invert':
+                icon = '\U0001f504'  # 🔄
+            elif action == 'block':
+                icon = '\U0001f534'  # 🔴
+            else:
+                icon = '\u2b55'  # ⭕
+        win   = f"{row.get('win_pct', 0.0):.0f}%" if row.get('resolved', 0) else '--'
         total = int(row.get('total', 0) or 0)
-        label = f"{icon} {row['bucket']}  {row.get('action', 'default')[:3].upper()}  {win}  n={total}"
+        action_label = str(row.get('action') or 'default').upper()
+        label = f"{icon} {row['bucket']}  {action_label}  {win}  {total}"
         rows.append([InlineKeyboardButton(label.strip(), callback_data=f"threshold_bucket_{channel}_{row['bucket']}_{filter_mode}_{sort_mode}_{offset}")])
 
+    # Filter tabs — mark active with checkmark
+    def _fb(label: str, cb: str, active_val: str, current_val: str) -> InlineKeyboardButton:
+        prefix = '\u2705 ' if current_val == active_val else ''
+        return InlineKeyboardButton(f"{prefix}{label}", callback_data=cb)
+
     filter_row = [
-        _filter_btn('All', f'thresholds_browse_{channel}_all_{sort_mode}_0', filter_mode),
-        _filter_btn('Cfg', f'thresholds_browse_{channel}_configured_{sort_mode}_0', filter_mode),
-        _filter_btn('Hot', f'thresholds_browse_{channel}_hot_{sort_mode}_0', filter_mode),
-        _filter_btn('Rev', f'thresholds_browse_{channel}_review_{sort_mode}_0', filter_mode),
+        _fb('All',      f'thresholds_browse_{channel}_all_{sort_mode}_0',        'all',        filter_mode),
+        _fb('Overrides', f'thresholds_browse_{channel}_configured_{sort_mode}_0', 'configured', filter_mode),
+        _fb('\U0001f525 Hot',  f'thresholds_browse_{channel}_hot_{sort_mode}_0',       'hot',        filter_mode),
+        _fb('\u26a0\ufe0f Rev', f'thresholds_browse_{channel}_review_{sort_mode}_0',    'review',     filter_mode),
     ]
     sort_row = [
-        _filter_btn('Bucket', f'thresholds_browse_{channel}_{filter_mode}_bucket_0', sort_mode),
-        _filter_btn('WR', f'thresholds_browse_{channel}_{filter_mode}_wr_0', sort_mode),
-        _filter_btn('Recent', f'thresholds_browse_{channel}_{filter_mode}_recent_0', sort_mode),
-        _filter_btn('Act', f'thresholds_browse_{channel}_{filter_mode}_activity_0', sort_mode),
+        _fb('Bucket', f'thresholds_browse_{channel}_{filter_mode}_bucket_0',   'bucket',   sort_mode),
+        _fb('WR',     f'thresholds_browse_{channel}_{filter_mode}_wr_0',        'wr',       sort_mode),
+        _fb('Recent', f'thresholds_browse_{channel}_{filter_mode}_recent_0',    'recent',   sort_mode),
+        _fb('Volume', f'thresholds_browse_{channel}_{filter_mode}_activity_0',  'activity', sort_mode),
     ]
     rows.append(filter_row)
     rows.append(sort_row)
 
     nav = []
     if offset > 0:
-        nav.append(InlineKeyboardButton('Prev', callback_data=f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{max(0, offset - page_size)}'))
+        nav.append(InlineKeyboardButton('\u2190 Prev', callback_data=f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{max(0, offset - page_size)}'))
     if offset + page_size < len(buckets):
-        nav.append(InlineKeyboardButton('Next', callback_data=f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{offset + page_size}'))
+        nav.append(InlineKeyboardButton('Next \u2192', callback_data=f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{offset + page_size}'))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton('Back', callback_data=f'thresholds_home_{channel}')])
+    rows.append([InlineKeyboardButton('\u2190 Dashboard', callback_data=f'thresholds_home_{channel}')])
     return InlineKeyboardMarkup(rows)
 
 
 def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: str | None = None) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+    # Determine adjacent buckets for navigation (best effort from bucket string)
+    try:
+        lo, hi = bucket.split('-')
+        step = round(float(hi) - float(lo), 4)
+        prev_lo = round(float(lo) - step, 4)
+        prev_hi = round(float(lo), 4)
+        next_lo = round(float(hi), 4)
+        next_hi = round(float(hi) + step, 4)
+        prev_bucket = f"{prev_lo:.2f}-{prev_hi:.2f}"
+        next_bucket = f"{next_lo:.2f}-{next_hi:.2f}"
+        nav_row = [
+            InlineKeyboardButton(f'\u2190 {prev_bucket}', callback_data=f'threshold_bucket_{channel}_{prev_bucket}_{back_callback or "all_bucket_0"}'),
+            InlineKeyboardButton(f'{next_bucket} \u2192', callback_data=f'threshold_bucket_{channel}_{next_bucket}_{back_callback or "all_bucket_0"}'),
+        ]
+        has_nav = True
+    except Exception:
+        has_nav = False
+
+    kb_rows = [
         [
-            InlineKeyboardButton('Set FOLLOW', callback_data=f'threshold_set_{channel}_{bucket}_follow'),
-            InlineKeyboardButton('Set INVERT', callback_data=f'threshold_set_{channel}_{bucket}_invert'),
+            InlineKeyboardButton('\U0001f7e2 Set FOLLOW', callback_data=f'threshold_set_{channel}_{bucket}_follow'),
+            InlineKeyboardButton('\U0001f504 Set INVERT', callback_data=f'threshold_set_{channel}_{bucket}_invert'),
         ],
         [
-            InlineKeyboardButton('Set BLOCK', callback_data=f'threshold_set_{channel}_{bucket}_block'),
-            InlineKeyboardButton('Clear Override', callback_data=f'threshold_clear_{channel}_{bucket}'),
+            InlineKeyboardButton('\U0001f534 Set BLOCK',  callback_data=f'threshold_set_{channel}_{bucket}_block'),
+            InlineKeyboardButton('Clear Override',        callback_data=f'threshold_clear_{channel}_{bucket}'),
         ],
-        [InlineKeyboardButton('Back', callback_data=back_callback or f'thresholds_browse_{channel}_all_bucket_0')],
-    ])
+    ]
+    if has_nav:
+        kb_rows.append(nav_row)
+    kb_rows.append([InlineKeyboardButton('\u2190 Back to list', callback_data=back_callback or f'thresholds_browse_{channel}_all_bucket_0')])
+    return InlineKeyboardMarkup(kb_rows)
