@@ -292,8 +292,8 @@ def ml_volatility_gate_confirm_keyboard() -> InlineKeyboardMarkup:
 def threshold_channel_keyboard(active: str = "real") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            _filter_btn("\u2705 REAL" if active == "real" else "REAL", "thresholds_home_real", active),
-            _filter_btn("\u2705 DEMO" if active == "demo" else "DEMO", "thresholds_home_demo", active),
+            _filter_btn("REAL", "thresholds_home_real", active),
+            _filter_btn("DEMO", "thresholds_home_demo", active),
         ],
         [
             InlineKeyboardButton("\U0001f5c2\ufe0f All Buckets", callback_data=f"thresholds_browse_{active}_all_bucket_0"),
@@ -345,8 +345,8 @@ def threshold_bucket_keyboard(channel: str, buckets: list[dict], filter_mode: st
     filter_row = [
         _fb('All',      f'thresholds_browse_{channel}_all_{sort_mode}_0',        'all',        filter_mode),
         _fb('Overrides', f'thresholds_browse_{channel}_configured_{sort_mode}_0', 'configured', filter_mode),
-        _fb('\U0001f525 Hot',  f'thresholds_browse_{channel}_hot_{sort_mode}_0',       'hot',        filter_mode),
-        _fb('\u26a0\ufe0f Rev', f'thresholds_browse_{channel}_review_{sort_mode}_0',    'review',     filter_mode),
+        _fb('Hot',  f'thresholds_browse_{channel}_hot_{sort_mode}_0',    'hot',    filter_mode),
+        _fb('Rev',  f'thresholds_browse_{channel}_review_{sort_mode}_0', 'review', filter_mode),
     ]
     sort_row = [
         _fb('Bucket', f'thresholds_browse_{channel}_{filter_mode}_bucket_0',   'bucket',   sort_mode),

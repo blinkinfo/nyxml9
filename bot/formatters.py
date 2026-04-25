@@ -1315,7 +1315,6 @@ def format_threshold_bucket_browser(channel: str, filter_mode: str, sort_mode: s
         SEP,
         '',
         f"  {'Bucket':<10}  {'Policy':<8}  {'WR':>6}   Picks",
-        f"  {'\u2500' * 38}",
     ]
 
     if not view:
@@ -1328,8 +1327,6 @@ def format_threshold_bucket_browser(channel: str, filter_mode: str, sort_mode: s
             picks  = int(row.get('total', 0) or 0)
             lines.append(f"{icon} {row['bucket']:<10}  {action:<8}  {wr:>6}   {picks}")
 
-    lines.append('')
-    lines.append(SEP)
     lines.append(f"{_E_HOT} hot  {_E_REVIEW} review  {_E_FOLLOW} follow  {_E_INVERT} invert  {_E_BLOCK} block  {_E_DEFAULT} default")
     return '\n'.join(lines)
 
@@ -1456,7 +1453,6 @@ def format_threshold_recent_changes(channel: str, rows: list[dict[str, Any]]) ->
         SEP,
         '',
         f"  {'Bucket':<10}  {'Action':<16}  When",
-        f"  {'\u2500' * 38}",
     ]
     if not rows:
         lines.append('  No recent threshold control changes recorded.')
