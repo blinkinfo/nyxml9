@@ -733,6 +733,32 @@ async def get_all_signals_for_export() -> list[dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
+async def get_all_real_trades_for_export() -> list[dict[str, Any]]:
+    """Return all real trades ordered by id for Excel export."""
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, signal_id, created_at, slot_start, slot_end, side, entry_price, "
+            "amount_usdc, order_id, fill_price, status, outcome, is_win, pnl, resolved_at "
+            "FROM trades WHERE is_demo = 0 ORDER BY id ASC"
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def get_all_demo_trades_for_export() -> list[dict[str, Any]]:
+    """Return all demo trades ordered by id for Excel export."""
+    async with aiosqlite.connect(_db()) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, signal_id, created_at, slot_start, slot_end, side, entry_price, "
+            "amount_usdc, order_id, fill_price, status, outcome, is_win, pnl, resolved_at "
+            "FROM trades WHERE is_demo = 1 ORDER BY id ASC"
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Demo Trade Settings
 # ---------------------------------------------------------------------------

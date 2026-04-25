@@ -185,6 +185,7 @@ def trade_filter_row(active: str = "all") -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup([
         buttons,
+        [InlineKeyboardButton("\U0001f4ca Excel", callback_data="download_trades_xlsx")],
         [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
     ])
 
@@ -246,6 +247,7 @@ def demo_filter_row(active: str = "all") -> InlineKeyboardMarkup:
             _filter_btn("Last 50", "demo_50", active),
             _filter_btn("All Time", "demo_all", active),
         ],
+        [InlineKeyboardButton("\U0001f4ca Excel", callback_data="download_demo_trades_xlsx")],
         [InlineKeyboardButton("\U0001f519 Back to Menu", callback_data="cmd_menu")],
     ])
 
