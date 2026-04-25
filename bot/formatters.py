@@ -1251,162 +1251,171 @@ def _fmt_wr(win_pct: float | None, resolved: int) -> str:
 
 
 def format_threshold_controls_overview(channel: str, summary: dict[str, Any], highlights: list[dict[str, Any]]) -> str:
-    mix = summary.get('policy_mix', {})
-    last = _fmt_relative_ts(summary.get('last_seen'))
-    wr = summary.get('win_rate', 0.0)
-    wr_str = f"{wr:.1f}%" if summary.get('resolved_count', 0) else '—'
+    mix    = summary.get('policy_mix', {})
+    last   = _fmt_relative_ts(summary.get('last_seen'))
+    wr     = summary.get('win_rate', 0.0)
+    wr_str = f"{wr:.1f}%" if summary.get('resolved_count', 0) else '\u2014'
 
     lines = [
         f"{_E_DASH} <b>Threshold Dashboard \u2014 {channel.upper()}</b>",
-        SEP,
-        '',
-        f"{_E_SNAP} <b>Snapshot</b>",
-        f"Active buckets:  {summary.get('active_buckets', 0)}",
-        f"Overrides set:   {summary.get('configured_count', 0)}",
-        f"Resolved:        {summary.get('resolved_count', 0)}",
-        f"Skipped:         {summary.get('skipped_count', 0)}",
-        f"Last seen:       {last}",
-        f"Events:          {summary.get('observed_events', 0)}",
-        f"Win rate:        {wr_str}",
-        '',
-        f"{_E_POLICY} <b>Policy mix</b>",
-        f"{_E_FOLLOW} Follow: {mix.get('follow', 0)}   {_E_INVERT} Invert: {mix.get('invert', 0)}   {_E_BLOCK} Block: {mix.get('block', 0)}",
+        '\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_SNAP} Snapshot',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 Buckets:    {summary.get("active_buckets", 0)}',
+        f'\u2502 Overrides:  {summary.get("configured_count", 0)}',
+        f'\u2502 Resolved:   {summary.get("resolved_count", 0)}',
+        f'\u2502 Skipped:    {summary.get("skipped_count", 0)}',
+        f'\u2502 Events:     {summary.get("observed_events", 0)}',
+        f'\u2502 Last seen:  {last}',
+        f'\u2502 Win rate:   {wr_str}',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_POLICY} Policy mix',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_FOLLOW} Follow   {mix.get("follow", 0)}',
+        f'\u2502 {_E_INVERT} Invert   {mix.get("invert", 0)}',
+        f'\u2502 {_E_BLOCK} Block    {mix.get("block", 0)}',
     ]
 
-    # Split highlights into hot vs review
     hot_rows    = [r for r in highlights if r.get('is_hot')][:3]
     review_rows = [r for r in highlights if r.get('needs_review')][:3]
 
     if hot_rows:
-        lines.append('')
-        lines.append(f"{_E_HOT} <b>Hot buckets</b>")
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append(f'\u2502 {_E_HOT} Hot buckets')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         for row in hot_rows:
             action = str(row.get('action') or 'default').upper()
-            wr_r = _fmt_wr(row.get('win_pct'), row.get('resolved', 0))
-            lines.append(f"  {row['bucket']:<10}  {action:<7}  {wr_r}   {row.get('resolved', 0)} picks")
+            wr_r   = _fmt_wr(row.get('win_pct'), row.get('resolved', 0))
+            lines.append(f'\u2502 {row["bucket"]}  {action}  {wr_r}  {row.get("resolved", 0)} picks')
 
     if review_rows:
-        lines.append('')
-        lines.append(f"{_E_REVIEW} <b>Needs review</b>")
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append(f'\u2502 {_E_REVIEW} Needs review')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         for row in review_rows:
             action = str(row.get('action') or 'default').upper()
-            wr_r = _fmt_wr(row.get('win_pct'), row.get('resolved', 0))
-            lines.append(f"  {row['bucket']:<10}  {action:<7}  {wr_r}   {row.get('resolved', 0)} picks")
+            wr_r   = _fmt_wr(row.get('win_pct'), row.get('resolved', 0))
+            lines.append(f'\u2502 {row["bucket"]}  {action}  {wr_r}  {row.get("resolved", 0)} picks')
 
     if not hot_rows and not review_rows:
-        lines.append('')
-        lines.append('No threshold bucket history yet.')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append('\u2502 No bucket history yet.')
 
+    lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
     return '\n'.join(lines)
 
 
 def format_threshold_bucket_browser(channel: str, filter_mode: str, sort_mode: str, rows: list[dict[str, Any]], offset: int, page_size: int = 8) -> str:
     view = rows[offset:offset + page_size]
     title_map = {
-        'all': 'All Buckets',
+        'all':        'All Buckets',
         'configured': 'Overrides Only',
-        'hot': 'Hot Buckets',
-        'review': 'Needs Review',
+        'hot':        'Hot Buckets',
+        'review':     'Needs Review',
     }
-    sort_label = {'bucket': 'Bucket', 'wr': 'Win Rate', 'recent': 'Recent', 'activity': 'Activity'}.get(sort_mode, sort_mode.title())
-    total_pages = max(1, (len(rows) + page_size - 1) // page_size)
+    sort_label   = {'bucket': 'Bucket', 'wr': 'Win Rate', 'recent': 'Recent', 'activity': 'Activity'}.get(sort_mode, sort_mode.title())
+    total_pages  = max(1, (len(rows) + page_size - 1) // page_size)
     current_page = offset // page_size + 1
+    title        = title_map.get(filter_mode, 'Buckets')
 
     lines = [
-        f"{_E_BROWSE} <b>{title_map.get(filter_mode, 'Buckets')} \u2014 {channel.upper()}</b>",
-        f"Sort: {sort_label}   Page {current_page} of {total_pages}",
-        SEP,
-        '',
-        f"  {'Bucket':<10}  {'Policy':<8}  {'WR':>6}   Picks",
+        f"{_E_BROWSE} <b>{title} \u2014 {channel.upper()}</b>",
+        '\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 Sort: {sort_label}   Page {current_page}/{total_pages}',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
     ]
 
     if not view:
-        lines.append('  No buckets match this view.')
+        lines.append('\u2502 No buckets match this view.')
     else:
         for row in view:
             icon   = _row_emoji(row)
             action = str(row.get('action') or 'default').upper()
             wr     = _fmt_wr(row.get('win_pct'), row.get('resolved', 0))
             picks  = int(row.get('total', 0) or 0)
-            lines.append(f"{icon} {row['bucket']:<10}  {action:<8}  {wr:>6}   {picks}")
+            lines.append(f'\u2502 {icon} {row["bucket"]}  {action}  {wr}  {picks}p')
 
-    lines.append(f"{_E_HOT} hot  {_E_REVIEW} review  {_E_FOLLOW} follow  {_E_INVERT} invert  {_E_BLOCK} block  {_E_DEFAULT} default")
+    lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+    lines.append(f'\u2502 {_E_HOT} hot  {_E_REVIEW} rev  {_E_FOLLOW} follow  {_E_INVERT} inv  {_E_BLOCK} block  {_E_DEFAULT} def')
+    lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
     return '\n'.join(lines)
 
 
 def format_threshold_bucket_detail(detail: dict[str, Any]) -> str:
-    totals  = detail['totals']
-    bucket  = detail['bucket']
-    channel = detail['channel'].upper()
-    action  = detail.get('configured_action', 'default')
-    ae      = _action_emoji(action)
-    wins    = totals.get('wins', 0)
-    losses  = totals.get('losses', 0)
+    totals   = detail['totals']
+    bucket   = detail['bucket']
+    channel  = detail['channel'].upper()
+    action   = detail.get('configured_action', 'default')
+    ae       = _action_emoji(action)
+    wins     = totals.get('wins', 0)
+    losses   = totals.get('losses', 0)
     resolved = totals.get('resolved', 0)
-    wr_str  = _fmt_wr(totals.get('win_pct'), resolved)
-    avg_p   = totals.get('avg_prob') or 0.0
-    last    = _fmt_relative_ts(totals.get('last_seen'))
+    wr_str   = _fmt_wr(totals.get('win_pct'), resolved)
+    avg_p    = totals.get('avg_prob') or 0.0
+    last     = _fmt_relative_ts(totals.get('last_seen'))
 
     lines = [
         f"{_E_BUCKET} <b>Bucket {bucket} \u2014 {channel}</b>",
-        SEP,
-        '',
-        f"Current policy:  {ae} {action.upper()}",
-        f"Last seen:       {last}",
-        '',
-        f"{_E_SNAP} <b>Performance</b>",
-        f"  Win rate:   {wr_str}   ({wins}W / {losses}L)",
-        f"  Resolved:   {resolved:<6}   Skipped:  {totals.get('skipped_count', 0)}",
-        f"  Avg prob:   {avg_p:.3f}    Picks:    {totals.get('fired_count', 0)}",
+        '\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_SNAP} Overview',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 Policy:    {ae} {action.upper()}',
+        f'\u2502 Last seen: {last}',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_SNAP} Performance',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 Win rate:  {wr_str}  ({wins}W / {losses}L)',
+        f'\u2502 Resolved:  {resolved}',
+        f'\u2502 Skipped:   {totals.get("skipped_count", 0)}',
+        f'\u2502 Avg prob:  {avg_p:.3f}',
+        f'\u2502 Picks:     {totals.get("fired_count", 0)}',
     ]
 
-    # Breakdown
     breakdown = detail.get('breakdown') or []
     if breakdown:
-        lines.append('')
-        lines.append(f"{_E_POLICY} <b>Breakdown</b>")
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append(f'\u2502 {_E_POLICY} Breakdown')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         for row in breakdown[:6]:
-            raw    = str(row.get('raw_side') or '').title()
-            final  = str(row.get('final_side') or 'Blocked').title()
-            act    = str(row.get('action') or '').upper()
-            n      = row.get('total', 0)
-            wr_b   = _fmt_wr(row.get('win_pct'), n)
-            lines.append(f"  {raw}\u2192{final:<10}  {act:<7}  {n} picks  {wr_b}")
+            raw   = str(row.get('raw_side') or '').title()
+            final = str(row.get('final_side') or 'Blocked').title()
+            act   = str(row.get('action') or '').upper()
+            n     = row.get('total', 0)
+            wr_b  = _fmt_wr(row.get('win_pct'), n)
+            lines.append(f'\u2502 {raw}\u2192{final}  {act}  {n}p  {wr_b}')
     else:
-        lines.append('')
-        lines.append('No signals have hit this bucket yet.')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append('\u2502 No signals hit this bucket yet.')
 
-    # Nearby
     nearby = detail.get('nearby') or []
     if nearby:
-        lines.append('')
-        lines.append(f"{_E_MAP} <b>Nearby</b>")
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append(f'\u2502 {_E_MAP} Nearby buckets')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         for row in nearby[:4]:
             nb_action = str(row.get('action') or 'default').upper()
             nb_wr     = _fmt_wr(row.get('win_pct'), row.get('total', 0))
             nb_picks  = int(row.get('total', 0) or 0)
-            marker    = '  \u2190 you are here' if str(row.get('bucket')) == str(bucket) else ''
-            lines.append(f"  {row['bucket']:<10}  {nb_action:<8}  {nb_wr:>6}  {nb_picks} picks{marker}")
+            marker    = '  \u2190 here' if str(row.get('bucket')) == str(bucket) else ''
+            lines.append(f'\u2502 {row["bucket"]}  {nb_action}  {nb_wr}  {nb_picks}p{marker}')
 
-    # Recommendation
     rec = detail.get('recommendation')
     if rec:
-        lines.append('')
-        lines.append(f"{_E_NOTE} <b>Note</b>")
-        # Wrap long notes at ~50 chars for readability
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append(f'\u2502 {_E_NOTE} Note')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         words = rec.split()
-        current = '  '
-        note_lines = []
+        current = ''
         for word in words:
-            if len(current) + len(word) + 1 > 52:
-                note_lines.append(current.rstrip())
-                current = '  ' + word + ' '
+            if len(current) + len(word) + 1 > 50:
+                lines.append(f'\u2502 {current.rstrip()}')
+                current = word + ' '
             else:
                 current += word + ' '
         if current.strip():
-            note_lines.append(current.rstrip())
-        lines.extend(note_lines)
+            lines.append(f'\u2502 {current.rstrip()}')
 
+    lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
     return '\n'.join(lines)
 
 
@@ -1416,19 +1425,18 @@ def format_threshold_policy_summary(channel: str, summary: dict[str, Any]) -> st
 
     lines = [
         f"{_E_POLICY} <b>Policy Summary \u2014 {channel.upper()}</b>",
-        SEP,
-        '',
-        f"{_E_FOLLOW} Follow:  {counts.get('follow', 0)} buckets",
-        f"{_E_INVERT} Invert:  {counts.get('invert', 0)} buckets",
-        f"{_E_BLOCK} Block:   {counts.get('block', 0)} buckets",
+        '\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_FOLLOW} Follow   {counts.get("follow", 0)} buckets',
+        f'\u2502 {_E_INVERT} Invert   {counts.get("invert", 0)} buckets',
+        f'\u2502 {_E_BLOCK} Block    {counts.get("block", 0)} buckets',
     ]
 
     if not rows:
-        lines.append('')
-        lines.append('No configured overrides yet.')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append('\u2502 No configured overrides yet.')
+        lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         return '\n'.join(lines)
 
-    # Group by action
     grouped: dict[str, list] = {'follow': [], 'invert': [], 'block': []}
     for row in rows[:24]:
         key = str(row.get('action') or '').lower()
@@ -1439,57 +1447,63 @@ def format_threshold_policy_summary(channel: str, summary: dict[str, Any]) -> st
         bucket_rows = grouped[action_key]
         if not bucket_rows:
             continue
-        lines.append('')
-        lines.append(f"{emoji} <b>{label}</b>")
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
+        lines.append(f'\u2502 {emoji} {label}')
+        lines.append('\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         for row in bucket_rows:
             wr    = _fmt_wr(row.get('win_pct'), row.get('total', 0))
             picks = int(row.get('total', 0) or 0)
             when  = _fmt_relative_ts(row.get('last_seen'))
-            lines.append(f"  {row['bucket']:<10}  {wr:>6}  {picks:>3} picks  {when}")
+            lines.append(f'\u2502 {row["bucket"]}  {wr}  {picks}p  {when}')
 
+    lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
     return '\n'.join(lines)
 
 
 def format_threshold_recent_changes(channel: str, rows: list[dict[str, Any]]) -> str:
     lines = [
         f"{_E_CHANGES} <b>Recent Changes \u2014 {channel.upper()}</b>",
-        SEP,
-        '',
-        f"  {'Bucket':<10}  {'Action':<16}  When",
+        '\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
     ]
     if not rows:
-        lines.append('  No recent threshold control changes recorded.')
+        lines.append('\u2502 No recent changes recorded.')
+        lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
         return '\n'.join(lines)
+
     for row in rows:
         action = str(row.get('action') or 'cleared')
         ae     = _action_emoji(action) if action != 'cleared' else _E_DEFAULT
         when   = _fmt_relative_ts(row.get('updated_at') or row.get('created_at'))
-        action_label = f"{ae} {action.upper()}"
-        lines.append(f"  {row['bucket']:<10}  {action_label:<16}  {when}")
+        lines.append(f'\u2502 {row["bucket"]}  {ae} {action.upper()}  {when}')
+
+    lines.append('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500')
     return '\n'.join(lines)
 
 
 def format_threshold_help(channel: str) -> str:
     return '\n'.join([
-        f"{_E_HELP} <b>Help and Legend \u2014 {channel.upper()}</b>",
-        SEP,
-        '',
-        f"{_E_BROWSE} <b>Views</b>",
-        f"  All Buckets      Every observed or configurable bucket",
-        f"  Overrides        Buckets with an explicit policy set",
-        f"  {_E_HOT} Hot           3+ resolved picks, 60%+ win rate",
-        f"  {_E_REVIEW} Needs Review  Mixed results, skips, or weak WR",
-        '',
-        f"{_E_POLICY} <b>Policy</b>",
-        f"  {_E_FOLLOW} FOLLOW   Keep the raw model side",
-        f"  {_E_INVERT} INVERT   Flip the raw side before execution",
-        f"  {_E_BLOCK} BLOCK    Suppress execution for this bucket",
-        '',
-        f"{_E_SNAP} <b>Status icons</b>",
-        f"  {_E_HOT}  hot bucket \u2014 clean winner",
-        f"  {_E_REVIEW}  review candidate \u2014 investigate",
-        f"  {_E_FOLLOW}  follow override set",
-        f"  {_E_INVERT}  invert override set",
-        f"  {_E_BLOCK}  block override set",
-        f"  {_E_DEFAULT}  no override \u2014 default behavior",
+        f"{_E_HELP} <b>Help & Legend \u2014 {channel.upper()}</b>",
+        '\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_BROWSE} Views',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        '\u2502 All Buckets    every observed bucket',
+        '\u2502 Overrides      buckets with explicit policy',
+        f'\u2502 {_E_HOT} Hot          3+ picks, 60%+ win rate',
+        f'\u2502 {_E_REVIEW} Review       mixed results or weak WR',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_POLICY} Policy actions',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_FOLLOW} FOLLOW   keep raw model side',
+        f'\u2502 {_E_INVERT} INVERT   flip side before execution',
+        f'\u2502 {_E_BLOCK} BLOCK    suppress this bucket',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_SNAP} Icons',
+        '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+        f'\u2502 {_E_HOT}  hot \u2014 clean winner',
+        f'\u2502 {_E_REVIEW}  review \u2014 investigate',
+        f'\u2502 {_E_FOLLOW}  follow override',
+        f'\u2502 {_E_INVERT}  invert override',
+        f'\u2502 {_E_BLOCK}  block override',
+        f'\u2502 {_E_DEFAULT}  default \u2014 no override',
+        '\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
     ])

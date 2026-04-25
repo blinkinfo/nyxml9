@@ -56,8 +56,8 @@ def test_threshold_formatters_render_dashboard_browser_and_detail():
     assert 'Threshold Dashboard' in overview
     assert 'REAL' in overview
     # Policy mix section uses emoji labels
-    assert 'Follow:' in overview
-    assert 'Invert:' in overview
+    assert 'Follow' in overview
+    assert 'Invert' in overview
 
     browser = format_threshold_bucket_browser('demo', 'review', 'recent', [
         {'bucket': '0.67', 'action': 'block', 'resolved': 0, 'total': 4, 'skipped_count': 4, 'win_pct': 0.0, 'is_hot': False, 'needs_review': True, 'configured': True}
@@ -103,7 +103,7 @@ def test_threshold_summary_changes_and_help_formatters():
     assert 'REAL' in summary
     assert 'Recent Changes' in changes
     assert 'REAL' in changes
-    assert 'Help and Legend' in help_text
+    assert 'Help' in help_text
     assert 'DEMO' in help_text
 
 
