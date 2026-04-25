@@ -1261,13 +1261,16 @@ def format_threshold_controls_overview(channel: str, summary: dict[str, Any], hi
         SEP,
         '',
         f"{_E_SNAP} <b>Snapshot</b>",
-        f"Active buckets:  {summary.get('active_buckets', 0):<6}   Last seen:  {last}",
-        f"Overrides set:   {summary.get('configured_count', 0):<6}   Events:     {summary.get('observed_events', 0)}",
-        f"Resolved:        {summary.get('resolved_count', 0):<6}   Win rate:   {wr_str}",
+        f"Active buckets:  {summary.get('active_buckets', 0)}",
+        f"Overrides set:   {summary.get('configured_count', 0)}",
+        f"Resolved:        {summary.get('resolved_count', 0)}",
         f"Skipped:         {summary.get('skipped_count', 0)}",
+        f"Last seen:       {last}",
+        f"Events:          {summary.get('observed_events', 0)}",
+        f"Win rate:        {wr_str}",
         '',
         f"{_E_POLICY} <b>Policy mix</b>",
-        f"{_E_FOLLOW} Follow:  {mix.get('follow', 0)}    {_E_INVERT} Invert:  {mix.get('invert', 0)}    {_E_BLOCK} Block:  {mix.get('block', 0)}",
+        f"{_E_FOLLOW} Follow: {mix.get('follow', 0)}   {_E_INVERT} Invert: {mix.get('invert', 0)}   {_E_BLOCK} Block: {mix.get('block', 0)}",
     ]
 
     # Split highlights into hot vs review
