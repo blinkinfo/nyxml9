@@ -4,7 +4,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from bot.keyboards import settings_keyboard, threshold_bucket_action_keyboard, threshold_bucket_keyboard
+from bot.keyboards import (
+    settings_keyboard,
+    threshold_action_name,
+    threshold_bucket_action_keyboard,
+    threshold_bucket_keyboard,
+)
 from bot.formatters import (
     format_threshold_bucket_browser,
     format_threshold_bucket_detail,
@@ -26,16 +31,25 @@ def test_threshold_bucket_keyboard_contains_bucket_callbacks():
     assert 'threshold_bucket_real_0.50_configured_wr_0' in keys
     assert 'threshold_bucket_real_0.51_configured_wr_0' in keys
     assert 'thresholds_browse_real_configured_wr_0' in keys
+    assert max(len(key.encode('utf-8')) for key in keys) <= 64
 
 
-def test_threshold_action_keyboard_contains_all_actions_and_back_callback():
+def test_threshold_action_keyboard_contains_compact_actions_and_back_callback():
     kb = threshold_bucket_action_keyboard('demo', '0.58', back_callback='thresholds_browse_demo_hot_wr_8')
     actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-    assert 'threshold_set_demo_0.58_follow_thresholds_browse_demo_hot_wr_8' in actions
-    assert 'threshold_set_demo_0.58_invert_thresholds_browse_demo_hot_wr_8' in actions
-    assert 'threshold_set_demo_0.58_block_thresholds_browse_demo_hot_wr_8' in actions
-    assert 'threshold_clear_demo_0.58_thresholds_browse_demo_hot_wr_8' in actions
+    assert 'threshold_set_demo_0.58_f_demo:hot:wr:8' in actions
+    assert 'threshold_set_demo_0.58_i_demo:hot:wr:8' in actions
+    assert 'threshold_set_demo_0.58_b_demo:hot:wr:8' in actions
+    assert 'threshold_clear_demo_0.58_demo:hot:wr:8' in actions
     assert 'thresholds_browse_demo_hot_wr_8' in actions
+    assert max(len(action.encode('utf-8')) for action in actions) <= 64
+
+
+def test_threshold_action_name_accepts_compact_and_legacy_tokens():
+    assert threshold_action_name('f') == 'follow'
+    assert threshold_action_name('i') == 'invert'
+    assert threshold_action_name('b') == 'block'
+    assert threshold_action_name('follow') == 'follow'
 
 
 def test_threshold_formatters_render_dashboard_browser_and_detail():

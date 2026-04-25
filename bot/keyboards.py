@@ -5,6 +5,50 @@ from __future__ import annotations
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
+_THRESHOLD_ACTION_CODES = {
+    'follow': 'f',
+    'invert': 'i',
+    'block': 'b',
+}
+
+_THRESHOLD_ACTION_NAMES = {value: key for key, value in _THRESHOLD_ACTION_CODES.items()}
+
+
+def threshold_browser_callback(channel: str, filter_mode: str, sort_mode: str, offset: int) -> str:
+    return f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{offset}'
+
+
+def threshold_bucket_callback(channel: str, bucket: str, filter_mode: str, sort_mode: str, offset: int) -> str:
+    return f'threshold_bucket_{channel}_{bucket}_{filter_mode}_{sort_mode}_{offset}'
+
+
+def encode_threshold_back_state(channel: str, filter_mode: str, sort_mode: str, offset: int) -> str:
+    return f'{channel}:{filter_mode}:{sort_mode}:{offset}'
+
+
+def decode_threshold_back_state(state: str | None) -> tuple[str, str, str, int] | None:
+    if not state:
+        return None
+    try:
+        channel, filter_mode, sort_mode, offset = state.split(':', 3)
+        return channel, filter_mode, sort_mode, int(offset)
+    except (TypeError, ValueError):
+        return None
+
+
+def threshold_action_callback(channel: str, bucket: str, action: str, back_state: str) -> str:
+    action_code = _THRESHOLD_ACTION_CODES[action]
+    return f'threshold_set_{channel}_{bucket}_{action_code}_{back_state}'
+
+
+def threshold_clear_callback(channel: str, bucket: str, back_state: str) -> str:
+    return f'threshold_clear_{channel}_{bucket}_{back_state}'
+
+
+def threshold_action_name(action_token: str) -> str:
+    return _THRESHOLD_ACTION_NAMES.get(action_token, action_token)
+
+
 # ---------------------------------------------------------------------------
 # Consistent filter button helper
 # ---------------------------------------------------------------------------
@@ -359,9 +403,9 @@ def threshold_bucket_keyboard(channel: str, buckets: list[dict], filter_mode: st
 
     nav = []
     if offset > 0:
-        nav.append(InlineKeyboardButton('\u2190 Prev', callback_data=f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{max(0, offset - page_size)}'))
+        nav.append(InlineKeyboardButton('\u2190 Prev', callback_data=threshold_browser_callback(channel, filter_mode, sort_mode, max(0, offset - page_size))))
     if offset + page_size < len(buckets):
-        nav.append(InlineKeyboardButton('Next \u2192', callback_data=f'thresholds_browse_{channel}_{filter_mode}_{sort_mode}_{offset + page_size}'))
+        nav.append(InlineKeyboardButton('Next \u2192', callback_data=threshold_browser_callback(channel, filter_mode, sort_mode, offset + page_size)))
     if nav:
         rows.append(nav)
     rows.append([InlineKeyboardButton('\u2190 Dashboard', callback_data=f'thresholds_home_{channel}')])
@@ -369,31 +413,24 @@ def threshold_bucket_keyboard(channel: str, buckets: list[dict], filter_mode: st
 
 
 def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: str | None = None) -> InlineKeyboardMarkup:
-    back_callback = back_callback or f'thresholds_browse_{channel}_all_bucket_0'
+    back_callback = back_callback or threshold_browser_callback(channel, 'all', 'bucket', 0)
+    back_state = encode_threshold_back_state(channel, 'all', 'bucket', 0)
+
+    decoded_back = decode_threshold_back_state(back_callback)
+    if decoded_back:
+        back_state = back_callback
+    elif back_callback.startswith('thresholds_browse_'):
+        try:
+            _, _, back_channel, filter_mode, sort_mode, offset = back_callback.split('_', 5)
+            back_state = encode_threshold_back_state(back_channel, filter_mode, sort_mode, int(offset))
+        except ValueError:
+            back_state = encode_threshold_back_state(channel, 'all', 'bucket', 0)
 
     def _action_cb(action: str) -> str:
-        return f'threshold_set_{channel}_{bucket}_{action}_{back_callback}'
+        return threshold_action_callback(channel, bucket, action, back_state)
 
     def _clear_cb() -> str:
-        return f'threshold_clear_{channel}_{bucket}_{back_callback}'
-
-    # Determine adjacent buckets for navigation (best effort from bucket string)
-    try:
-        lo, hi = bucket.split('-')
-        step = round(float(hi) - float(lo), 4)
-        prev_lo = round(float(lo) - step, 4)
-        prev_hi = round(float(lo), 4)
-        next_lo = round(float(hi), 4)
-        next_hi = round(float(hi) + step, 4)
-        prev_bucket = f"{prev_lo:.2f}-{prev_hi:.2f}"
-        next_bucket = f"{next_lo:.2f}-{next_hi:.2f}"
-        nav_row = [
-            InlineKeyboardButton(f'\u2190 {prev_bucket}', callback_data=f'threshold_bucket_{channel}_{prev_bucket}_{back_callback}'),
-            InlineKeyboardButton(f'{next_bucket} \u2192', callback_data=f'threshold_bucket_{channel}_{next_bucket}_{back_callback}'),
-        ]
-        has_nav = True
-    except Exception:
-        has_nav = False
+        return threshold_clear_callback(channel, bucket, back_state)
 
     kb_rows = [
         [
@@ -404,8 +441,6 @@ def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: s
             InlineKeyboardButton('\U0001f534 Set BLOCK',  callback_data=_action_cb('block')),
             InlineKeyboardButton('Clear Override',        callback_data=_clear_cb()),
         ],
+        [InlineKeyboardButton('\u2190 Back to list', callback_data=back_callback)],
     ]
-    if has_nav:
-        kb_rows.append(nav_row)
-    kb_rows.append([InlineKeyboardButton('\u2190 Back to list', callback_data=back_callback)])
     return InlineKeyboardMarkup(kb_rows)
