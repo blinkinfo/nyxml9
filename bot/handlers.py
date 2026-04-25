@@ -56,6 +56,9 @@ from bot.keyboards import (
     main_menu,
     ml_menu,
     ml_volatility_gate_confirm_keyboard,
+    parse_threshold_action_callback,
+    parse_threshold_bucket_callback,
+    parse_threshold_clear_callback,
     pattern_keyboard,
     redeem_confirm_keyboard,
     redeem_done_keyboard,
@@ -612,47 +615,61 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _, _, channel = data.split("_", 2)
         await _render_threshold_help(update, channel)
 
-    elif data.startswith("threshold_bucket_"):
-        _, _, channel, bucket, filter_mode, sort_mode, offset = data.split("_", 6)
-        back_callback = threshold_browser_callback(channel, filter_mode, sort_mode, int(offset))
+    elif data.startswith("threshold_bucket|") or data.startswith("threshold_bucket_"):
+        parsed = parse_threshold_bucket_callback(data)
+        if parsed:
+            channel, bucket, back_state = parsed
+            decoded_back = decode_threshold_back_state(back_state)
+            back_callback = threshold_browser_callback(*decoded_back) if decoded_back else threshold_browser_callback(channel, "all", "bucket", 0)
+        else:
+            _, _, channel, bucket, filter_mode, sort_mode, offset = data.split("_", 6)
+            back_callback = threshold_browser_callback(channel, filter_mode, sort_mode, int(offset))
         await _render_threshold_bucket(update, channel, bucket, back_callback=back_callback)
 
-    elif data.startswith("threshold_set_"):
-        parts = data.split("_")
-        if len(parts) >= 6:
-            _, _, channel, bucket, action_token, *back_parts = parts
-            action = threshold_action_name(action_token)
-            back_payload = "_".join(back_parts) if back_parts else None
+    elif data.startswith("threshold_set|") or data.startswith("threshold_set_"):
+        parsed = parse_threshold_action_callback(data)
+        if parsed:
+            channel, bucket, action, back_payload = parsed
         else:
-            _, _, channel, bucket, action = parts
-            back_payload = None
+            parts = data.split("_")
+            if len(parts) >= 6:
+                _, _, channel, bucket, action_token, *back_parts = parts
+                action = threshold_action_name(action_token)
+                back_payload = "_".join(back_parts) if back_parts else None
+            else:
+                _, _, channel, bucket, action = parts
+                back_payload = None
         decoded_back = decode_threshold_back_state(back_payload)
         if decoded_back:
             back_channel, filter_mode, sort_mode, offset = decoded_back
             back_callback = threshold_browser_callback(back_channel, filter_mode, sort_mode, offset)
         else:
-            back_callback = back_payload
+            back_callback = threshold_browser_callback(channel, "all", "bucket", 0)
         await queries.set_threshold_control(channel, bucket, action)
-        await query.answer(f"{channel.upper()} {bucket} -> {action.upper()}")
         await _render_threshold_bucket(update, channel, bucket, back_callback=back_callback)
+        await query.answer(f"Policy set: {action.upper()} for {bucket}")
 
-    elif data.startswith("threshold_clear_"):
-        parts = data.split("_")
-        if len(parts) >= 5:
-            _, _, channel, bucket, *back_parts = parts
-            back_payload = "_".join(back_parts) if back_parts else None
+    elif data.startswith("threshold_clear|") or data.startswith("threshold_clear_"):
+        parsed = parse_threshold_clear_callback(data)
+        if parsed:
+            channel, bucket, back_payload = parsed
         else:
-            _, _, channel, bucket = parts
-            back_payload = None
+            parts = data.split("_")
+            if len(parts) >= 5:
+                _, _, channel, bucket, *back_parts = parts
+                back_payload = "_".join(back_parts) if back_parts else None
+            else:
+                _, _, channel, bucket = parts
+                back_payload = None
         decoded_back = decode_threshold_back_state(back_payload)
         if decoded_back:
             back_channel, filter_mode, sort_mode, offset = decoded_back
             back_callback = threshold_browser_callback(back_channel, filter_mode, sort_mode, offset)
         else:
-            back_callback = back_payload
+            back_callback = threshold_browser_callback(channel, "all", "bucket", 0)
         deleted = await queries.delete_threshold_control(channel, bucket)
-        await query.answer("Override cleared" if deleted else "No override to clear")
         await _render_threshold_bucket(update, channel, bucket, back_callback=back_callback)
+        await query.answer("Override cleared" if deleted else "No override to clear")
 
     elif data == "cmd_redeem":
         await cmd_redeem(update, context)

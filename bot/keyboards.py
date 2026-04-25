@@ -19,7 +19,8 @@ def threshold_browser_callback(channel: str, filter_mode: str, sort_mode: str, o
 
 
 def threshold_bucket_callback(channel: str, bucket: str, filter_mode: str, sort_mode: str, offset: int) -> str:
-    return f'threshold_bucket_{channel}_{bucket}_{filter_mode}_{sort_mode}_{offset}'
+    back_state = encode_threshold_back_state(channel, filter_mode, sort_mode, offset)
+    return f'threshold_bucket|{channel}|{bucket}|{back_state}'
 
 
 def encode_threshold_back_state(channel: str, filter_mode: str, sort_mode: str, offset: int) -> str:
@@ -36,13 +37,47 @@ def decode_threshold_back_state(state: str | None) -> tuple[str, str, str, int] 
         return None
 
 
+def parse_threshold_bucket_callback(data: str) -> tuple[str, str, str] | None:
+    if not data.startswith('threshold_bucket|'):
+        return None
+    try:
+        _, channel, bucket, back_state = data.split('|', 3)
+        return channel, bucket, back_state
+    except ValueError:
+        return None
+
+
 def threshold_action_callback(channel: str, bucket: str, action: str, back_state: str) -> str:
     action_code = _THRESHOLD_ACTION_CODES[action]
-    return f'threshold_set_{channel}_{bucket}_{action_code}_{back_state}'
+    return f'threshold_set|{channel}|{bucket}|{action_code}|{back_state}'
 
 
 def threshold_clear_callback(channel: str, bucket: str, back_state: str) -> str:
-    return f'threshold_clear_{channel}_{bucket}_{back_state}'
+    return f'threshold_clear|{channel}|{bucket}|{back_state}'
+
+
+def parse_threshold_action_callback(data: str) -> tuple[str, str, str, str] | None:
+    prefix = 'threshold_set|'
+    if not data.startswith(prefix):
+        return None
+    try:
+        payload = data[len(prefix):]
+        channel, bucket, action_token, back_state = payload.rsplit('|', 3)
+        return channel, bucket, threshold_action_name(action_token), back_state
+    except ValueError:
+        return None
+
+
+def parse_threshold_clear_callback(data: str) -> tuple[str, str, str] | None:
+    prefix = 'threshold_clear|'
+    if not data.startswith(prefix):
+        return None
+    try:
+        payload = data[len(prefix):]
+        channel, bucket, back_state = payload.rsplit('|', 2)
+        return channel, bucket, back_state
+    except ValueError:
+        return None
 
 
 def threshold_action_name(action_token: str) -> str:
@@ -381,7 +416,7 @@ def threshold_bucket_keyboard(channel: str, buckets: list[dict], filter_mode: st
         total = int(row.get('total', 0) or 0)
         action_label = str(row.get('action') or 'default').upper()
         label = f"{icon} {row['bucket']}  {action_label}  {win}  {total}"
-        rows.append([InlineKeyboardButton(label.strip(), callback_data=f"threshold_bucket_{channel}_{row['bucket']}_{filter_mode}_{sort_mode}_{offset}")])
+        rows.append([InlineKeyboardButton(label.strip(), callback_data=threshold_bucket_callback(channel, row['bucket'], filter_mode, sort_mode, offset))])
 
     # Filter tabs — mark active with checkmark
     def _fb(label: str, cb: str, active_val: str, current_val: str) -> InlineKeyboardButton:
@@ -444,5 +479,6 @@ def threshold_bucket_action_keyboard(channel: str, bucket: str, back_callback: s
             InlineKeyboardButton('Clear Override',        callback_data=_clear_cb()),
         ],
         [InlineKeyboardButton('\u2190 Back to list', callback_data=back_callback)],
+        [InlineKeyboardButton('\U0001f5c2\ufe0f All Buckets', callback_data=threshold_browser_callback(channel, 'all', 'bucket', 0))],
     ]
     return InlineKeyboardMarkup(kb_rows)
