@@ -28,8 +28,8 @@ def test_threshold_bucket_keyboard_contains_bucket_callbacks():
     ]
     kb = threshold_bucket_keyboard('real', rows, filter_mode='configured', sort_mode='wr', offset=0, page_size=2)
     keys = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-    assert 'threshold_bucket_real_0.50_configured_wr_0' in keys
-    assert 'threshold_bucket_real_0.51_configured_wr_0' in keys
+    assert 'threshold_bucket|real|0.50|real:configured:wr:0' in keys
+    assert 'threshold_bucket|real|0.51|real:configured:wr:0' in keys
     assert 'thresholds_browse_real_configured_wr_0' in keys
     assert max(len(key.encode('utf-8')) for key in keys) <= 64
 
@@ -37,10 +37,10 @@ def test_threshold_bucket_keyboard_contains_bucket_callbacks():
 def test_threshold_action_keyboard_contains_compact_actions_and_back_callback():
     kb = threshold_bucket_action_keyboard('demo', '0.58', back_callback='thresholds_browse_demo_hot_wr_8')
     actions = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-    assert 'threshold_set_demo_0.58_f_demo:hot:wr:8' in actions
-    assert 'threshold_set_demo_0.58_i_demo:hot:wr:8' in actions
-    assert 'threshold_set_demo_0.58_b_demo:hot:wr:8' in actions
-    assert 'threshold_clear_demo_0.58_demo:hot:wr:8' in actions
+    assert 'threshold_set|demo|0.58|f|demo:hot:wr:8' in actions
+    assert 'threshold_set|demo|0.58|i|demo:hot:wr:8' in actions
+    assert 'threshold_set|demo|0.58|b|demo:hot:wr:8' in actions
+    assert 'threshold_clear|demo|0.58|demo:hot:wr:8' in actions
     assert 'thresholds_browse_demo_hot_wr_8' in actions
     assert max(len(action.encode('utf-8')) for action in actions) <= 64
 

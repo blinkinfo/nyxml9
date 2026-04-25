@@ -1317,8 +1317,11 @@ async def get_threshold_bucket_browser_rows(
     stats = await get_threshold_bucket_stats(channel_n)
     stat_map = {row['bucket']: row for row in stats}
 
+    bucket_source = _all_threshold_buckets() if filter_mode == 'all' else _all_threshold_buckets_from_data(control_map, stat_map)
+    sorted_buckets = sorted(bucket_source, key=float)
+
     rows: list[dict[str, Any]] = []
-    for bucket in sorted(set(_all_threshold_buckets_from_data(control_map, stat_map))):
+    for bucket in sorted_buckets:
         stat = stat_map.get(bucket, {})
         control = control_map.get(bucket)
         total = int(stat.get('total', 0) or 0)
@@ -1372,11 +1375,15 @@ async def get_threshold_bucket_browser_rows(
     return rows
 
 
+def _all_threshold_buckets() -> set[str]:
+    return {truncate_probability_bucket(i / 100) for i in range(50, 100)}
+
+
 def _all_threshold_buckets_from_data(*maps: dict[str, Any]) -> set[str]:
     buckets: set[str] = set()
     for mapping in maps:
         buckets.update(mapping.keys())
-    return buckets or {truncate_probability_bucket(i / 100) for i in range(50, 100)}
+    return buckets or _all_threshold_buckets()
 
 
 async def get_threshold_bucket_detail(channel: str, bucket: str) -> dict[str, Any]:
